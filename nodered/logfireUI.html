@@ -51,13 +51,23 @@
     border-bottom: 2px solid #e8a032;
   }
 
+  .total {
+    color: #666;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+
+  .tab.active .total {
+    color: #a07828;
+  }
+
   .badge {
     background: #e8a032;
     color: #111;
     font-size: 11px;
     padding: 1px 5px;
     border-radius: 8px;
-    margin-left: 6px;
+    margin-left: 4px;
     font-weight: bold;
   }
 
@@ -142,6 +152,7 @@
 (function () {
   var devices = {};
   var activeDevice = null;
+  var initialLoadComplete = false;
 
   var tabsEl = document.getElementById('tabs');
   var logArea = document.getElementById('log-area');
@@ -155,8 +166,17 @@
     // Tab
     var tab = document.createElement('div');
     tab.className = 'tab';
-    tab.textContent = name;
     tab.dataset.device = name;
+
+    var tabName = document.createElement('span');
+    tabName.className = 'tab-name';
+    tabName.textContent = name;
+    tab.appendChild(tabName);
+
+    var totalBadge = document.createElement('span');
+    totalBadge.className = 'total';
+    totalBadge.textContent = '(0)';
+    tab.appendChild(totalBadge);
     tab.onclick = function () { switchTab(name); };
     tabsEl.appendChild(tab);
 
@@ -207,6 +227,14 @@
     clearBtn.textContent = 'Clear';
     clearBtn.onclick = function () {
       lines.innerHTML = '';
+      var d = devices[name];
+      d.total = 0;
+      d.unread = 0;
+      var totalBadge = d.tab.querySelector('.total');
+      if (totalBadge) totalBadge.textContent = '(0)';
+      var badge = d.tab.querySelector('.badge');
+      if (badge) badge.remove();
+      localStorage.removeItem('logfire_read_' + name);
       fetch('/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,7 +250,7 @@
     panel.appendChild(footer);
     logArea.appendChild(panel);
 
-    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, autoScroll: scrollCb };
+    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, total: 0, autoScroll: scrollCb };
 
     scrollCb.onchange = function () {
       if (scrollCb.checked) lines.scrollTop = lines.scrollHeight;
@@ -246,10 +274,11 @@
     d.tab.className = 'tab active';
     d.panel.className = 'log-panel active';
 
-    // Clear unread badge
+    // Clear unread badge and persist read state
     d.unread = 0;
     var badge = d.tab.querySelector('.badge');
     if (badge) badge.remove();
+    localStorage.setItem('logfire_read_' + name, new Date().toISOString());
 
     // Scroll to bottom if auto-scroll is on
     if (d.autoScroll.checked) d.lines.scrollTop = d.lines.scrollHeight;
@@ -270,11 +299,16 @@
     line.textContent = '[' + hh + ':' + mm + ':' + ss + '] ' + entry.message;
     d.lines.appendChild(line);
 
+    // Update total count
+    d.total++;
+    var totalBadge = d.tab.querySelector('.total');
+    if (totalBadge) totalBadge.textContent = '(' + d.total + ')';
+
     // Auto-scroll if active tab and auto-scroll enabled
     if (name === activeDevice && d.autoScroll.checked) {
       d.lines.scrollTop = d.lines.scrollHeight;
-    } else if (name !== activeDevice) {
-      // Increment unread badge
+    } else if (name !== activeDevice && initialLoadComplete) {
+      // Increment unread badge (only for live messages)
       d.unread++;
       var badge = d.tab.querySelector('.badge');
       if (!badge) {
@@ -295,6 +329,32 @@
         createDevice(name);
         logs[name].forEach(function (entry) { addLog(entry); });
       });
+
+      // Restore unread badges from localStorage
+      deviceNames.forEach(function (name) {
+        if (name === activeDevice) return;
+        var d = devices[name];
+        var lastRead = localStorage.getItem('logfire_read_' + name);
+        var unreadCount = 0;
+        if (!lastRead) {
+          // Never viewed — all messages are unread
+          unreadCount = d.total;
+        } else {
+          var entries = logs[name] || [];
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].timestamp > lastRead) unreadCount++;
+          }
+        }
+        if (unreadCount > 0) {
+          d.unread = unreadCount;
+          var badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = unreadCount;
+          d.tab.appendChild(badge);
+        }
+      });
+
+      initialLoadComplete = true;
     })
     .catch(function () {});
 
