@@ -1,0 +1,425 @@
+[
+    {
+        "id": "logfire_tab",
+        "type": "tab",
+        "label": "LogFire",
+        "disabled": false,
+        "info": "LogFire — debug logging hub for WiFi microcontrollers"
+    },
+    {
+        "id": "http_in_log",
+        "type": "http in",
+        "z": "logfire_tab",
+        "name": "POST /log",
+        "url": "/log",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 100,
+        "y": 100,
+        "wires": [
+            [
+                "fn_parse_store"
+            ]
+        ]
+    },
+    {
+        "id": "fn_parse_store",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Parse & Store",
+        "func": "var raw = msg.payload;\nif (typeof raw !== 'string' || raw.indexOf(':') === -1) {\n    msg.statusCode = 400;\n    msg.payload = 'Bad format. Expected DEVICE: message';\n    return [msg, null, null];\n}\n\nvar idx = raw.indexOf(':');\nvar device = raw.substring(0, idx).trim();\nvar message = raw.substring(idx + 1).trim();\nvar timestamp = new Date().toISOString();\n\nvar entry = { device: device, message: message, timestamp: timestamp };\n\n// Store in flow context\nvar logs = flow.get('logs') || {};\nif (!logs[device]) {\n    logs[device] = [];\n}\nlogs[device].push(entry);\nflow.set('logs', logs);\n\n// msg for HTTP response\nvar httpMsg = { payload: 'OK', statusCode: 200 };\n\n// msg for WebSocket broadcast\nvar wsMsg = { payload: entry };\n\n// msg for file persist\nvar fileMsg = { payload: JSON.stringify(logs) };\n\nreturn [httpMsg, wsMsg, fileMsg];",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 300,
+        "y": 100,
+        "wires": [
+            [
+                "http_resp_log"
+            ],
+            [
+                "ws_out_logs"
+            ],
+            [
+                "file_save"
+            ]
+        ]
+    },
+    {
+        "id": "http_resp_log",
+        "type": "http response",
+        "z": "logfire_tab",
+        "name": "200 OK",
+        "statusCode": "",
+        "headers": {},
+        "x": 500,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "ws_out_logs",
+        "type": "websocket out",
+        "z": "logfire_tab",
+        "name": "WS /ws/logs",
+        "server": "ws_server_logs",
+        "client": "",
+        "x": 510,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "ws_server_logs",
+        "type": "websocket-listener",
+        "path": "/ws/logs",
+        "wholemsg": "false"
+    },
+    {
+        "id": "file_save",
+        "type": "file",
+        "z": "logfire_tab",
+        "name": "Save logs",
+        "filename": "/data/logfire_logs.json",
+        "filenameType": "str",
+        "appendNewline": false,
+        "createDir": false,
+        "overwriteFile": "true",
+        "encoding": "utf8",
+        "x": 510,
+        "y": 140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "http_in_devices",
+        "type": "http in",
+        "z": "logfire_tab",
+        "name": "GET /devices",
+        "url": "/devices",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 110,
+        "y": 240,
+        "wires": [
+            [
+                "fn_list_devices"
+            ]
+        ]
+    },
+    {
+        "id": "fn_list_devices",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "List Devices",
+        "func": "var logs = flow.get('logs') || {};\nmsg.payload = Object.keys(logs);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 310,
+        "y": 240,
+        "wires": [
+            [
+                "http_resp_devices"
+            ]
+        ]
+    },
+    {
+        "id": "http_resp_devices",
+        "type": "http response",
+        "z": "logfire_tab",
+        "name": "Devices JSON",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 520,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "http_in_logs",
+        "type": "http in",
+        "z": "logfire_tab",
+        "name": "GET /logs",
+        "url": "/logs",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 100,
+        "y": 300,
+        "wires": [
+            [
+                "fn_get_logs"
+            ]
+        ]
+    },
+    {
+        "id": "fn_get_logs",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Get All Logs",
+        "func": "msg.payload = flow.get('logs') || {};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 310,
+        "y": 300,
+        "wires": [
+            [
+                "http_resp_logs"
+            ]
+        ]
+    },
+    {
+        "id": "http_resp_logs",
+        "type": "http response",
+        "z": "logfire_tab",
+        "name": "Logs JSON",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 510,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "http_in_clear",
+        "type": "http in",
+        "z": "logfire_tab",
+        "name": "POST /clear",
+        "url": "/clear",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 100,
+        "y": 350,
+        "wires": [
+            [
+                "fn_clear_device"
+            ]
+        ]
+    },
+    {
+        "id": "fn_clear_device",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Clear Device Logs",
+        "func": "var device = msg.payload.device;\nif (!device) {\n    msg.statusCode = 400;\n    msg.payload = 'Missing device';\n    return [msg, null];\n}\n\nvar logs = flow.get('logs') || {};\ndelete logs[device];\nflow.set('logs', logs);\n\nvar httpMsg = { payload: 'OK', statusCode: 200 };\nvar fileMsg = { payload: JSON.stringify(logs) };\nreturn [httpMsg, fileMsg];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 320,
+        "y": 350,
+        "wires": [
+            [
+                "http_resp_clear"
+            ],
+            [
+                "file_save"
+            ]
+        ]
+    },
+    {
+        "id": "http_resp_clear",
+        "type": "http response",
+        "z": "logfire_tab",
+        "name": "200 OK",
+        "statusCode": "",
+        "headers": {},
+        "x": 520,
+        "y": 350,
+        "wires": []
+    },
+    {
+        "id": "inject_cleanup",
+        "type": "inject",
+        "z": "logfire_tab",
+        "name": "Every 60s",
+        "props": [],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "60",
+        "topic": "",
+        "x": 110,
+        "y": 400,
+        "wires": [
+            [
+                "fn_auto_delete"
+            ]
+        ]
+    },
+    {
+        "id": "fn_auto_delete",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Auto-delete > 24h",
+        "func": "var logs = flow.get('logs') || {};\nvar cutoff = Date.now() - (24 * 60 * 60 * 1000);\nvar devices = Object.keys(logs);\n\nfor (var i = 0; i < devices.length; i++) {\n    var device = devices[i];\n    logs[device] = logs[device].filter(function(entry) {\n        return new Date(entry.timestamp).getTime() > cutoff;\n    });\n    if (logs[device].length === 0) {\n        delete logs[device];\n    }\n}\n\nflow.set('logs', logs);\n\nmsg.payload = JSON.stringify(logs);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 400,
+        "wires": [
+            [
+                "file_save"
+            ]
+        ]
+    },
+    {
+        "id": "inject_restore",
+        "type": "inject",
+        "z": "logfire_tab",
+        "name": "Startup",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "x": 100,
+        "y": 480,
+        "wires": [
+            [
+                "file_read"
+            ]
+        ]
+    },
+    {
+        "id": "file_read",
+        "type": "file in",
+        "z": "logfire_tab",
+        "name": "Read logs",
+        "filename": "/data/logfire_logs.json",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "utf8",
+        "allProps": false,
+        "x": 290,
+        "y": 480,
+        "wires": [
+            [
+                "fn_restore_logs"
+            ]
+        ]
+    },
+    {
+        "id": "fn_restore_logs",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Restore to context",
+        "func": "try {\n    var logs = JSON.parse(msg.payload);\n    flow.set('logs', logs);\n    node.warn('LogFire: restored ' + Object.keys(logs).length + ' devices from file');\n} catch (e) {\n    node.warn('LogFire: no saved logs found, starting fresh');\n}\nreturn null;",
+        "outputs": 0,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 510,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "http_in_logfire",
+        "type": "http in",
+        "z": "logfire_tab",
+        "name": "GET /logfire",
+        "url": "/logfire",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 110,
+        "y": 580,
+        "wires": [
+            [
+                "fn_serve_ui"
+            ]
+        ]
+    },
+    {
+        "id": "fn_serve_ui",
+        "type": "function",
+        "z": "logfire_tab",
+        "name": "Serve UI",
+        "func": "msg.payload = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>LogFire</title>\n<style>\n  * { margin: 0; padding: 0; box-sizing: border-box; }\n\n  body {\n    background: #1a1a1a;\n    color: #d4d4d4;\n    font-family: 'Courier New', monospace;\n    height: 100vh;\n    display: flex;\n    flex-direction: column;\n  }\n\n  header {\n    padding: 12px 16px;\n    background: #111;\n    border-bottom: 1px solid #333;\n    font-size: 18px;\n    font-weight: bold;\n    color: #e8a032;\n  }\n\n  #tabs {\n    display: flex;\n    background: #111;\n    border-bottom: 1px solid #333;\n    overflow-x: auto;\n    flex-shrink: 0;\n  }\n\n  .tab {\n    padding: 8px 16px;\n    cursor: pointer;\n    border-right: 1px solid #333;\n    white-space: nowrap;\n    color: #888;\n    position: relative;\n    user-select: none;\n  }\n\n  .tab:hover { color: #ccc; }\n\n  .tab.active {\n    background: #1a1a1a;\n    color: #e8a032;\n    border-bottom: 2px solid #e8a032;\n  }\n\n  .badge {\n    background: #e8a032;\n    color: #111;\n    font-size: 11px;\n    padding: 1px 5px;\n    border-radius: 8px;\n    margin-left: 6px;\n    font-weight: bold;\n  }\n\n  #log-area {\n    flex: 1;\n    overflow: hidden;\n    position: relative;\n  }\n\n  .log-panel {\n    display: none;\n    flex-direction: column;\n    height: 100%;\n  }\n\n  .log-panel.active {\n    display: flex;\n  }\n\n  .log-lines {\n    flex: 1;\n    overflow-y: auto;\n    padding: 12px 16px;\n    font-size: 13px;\n    line-height: 1.6;\n  }\n\n  .log-line { color: #b0b0b0; }\n\n  .panel-footer {\n    padding: 8px 16px;\n    background: #111;\n    border-top: 1px solid #333;\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n  }\n\n  .footer-left {\n    display: flex;\n    align-items: center;\n    gap: 4px;\n    font-size: 12px;\n    color: #888;\n  }\n\n  .footer-left input { cursor: pointer; }\n\n  .footer-right { display: flex; gap: 6px; }\n\n  .btn {\n    background: #333;\n    color: #ccc;\n    border: 1px solid #555;\n    padding: 4px 12px;\n    cursor: pointer;\n    font-family: inherit;\n    font-size: 12px;\n  }\n\n  .btn:hover { background: #444; }\n\n  #placeholder {\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    height: 100%;\n    color: #555;\n    font-size: 16px;\n  }\n</style>\n</head>\n<body>\n\n<header>LogFire</header>\n<div id=\"tabs\"></div>\n<div id=\"log-area\">\n  <div id=\"placeholder\">Waiting for devices...</div>\n</div>\n\n<script>\n(function () {\n  var devices = {};\n  var activeDevice = null;\n\n  var tabsEl = document.getElementById('tabs');\n  var logArea = document.getElementById('log-area');\n  var placeholder = document.getElementById('placeholder');\n\n  function createDevice(name) {\n    if (devices[name]) return;\n\n    placeholder.style.display = 'none';\n\n    // Tab\n    var tab = document.createElement('div');\n    tab.className = 'tab';\n    tab.textContent = name;\n    tab.dataset.device = name;\n    tab.onclick = function () { switchTab(name); };\n    tabsEl.appendChild(tab);\n\n    // Panel\n    var panel = document.createElement('div');\n    panel.className = 'log-panel';\n\n    var lines = document.createElement('div');\n    lines.className = 'log-lines';\n\n    var footer = document.createElement('div');\n    footer.className = 'panel-footer';\n\n    var footerLeft = document.createElement('div');\n    footerLeft.className = 'footer-left';\n    var scrollCb = document.createElement('input');\n    scrollCb.type = 'checkbox';\n    scrollCb.checked = true;\n    scrollCb.id = 'scroll-' + name;\n    var scrollLabel = document.createElement('label');\n    scrollLabel.htmlFor = scrollCb.id;\n    scrollLabel.textContent = 'Auto-scroll';\n    footerLeft.appendChild(scrollCb);\n    footerLeft.appendChild(scrollLabel);\n\n    var footerRight = document.createElement('div');\n    footerRight.className = 'footer-right';\n\n    var exportBtn = document.createElement('button');\n    exportBtn.className = 'btn';\n    exportBtn.textContent = 'Export';\n    exportBtn.onclick = function () {\n      var text = '';\n      var logLines = lines.querySelectorAll('.log-line');\n      for (var i = 0; i < logLines.length; i++) {\n        text += logLines[i].textContent + '\\\\n';\n      }\n      var blob = new Blob([text], { type: 'text/plain' });\n      var a = document.createElement('a');\n      a.href = URL.createObjectURL(blob);\n      a.download = name + '_logs.txt';\n      a.click();\n      URL.revokeObjectURL(a.href);\n    };\n\n    var clearBtn = document.createElement('button');\n    clearBtn.className = 'btn';\n    clearBtn.textContent = 'Clear';\n    clearBtn.onclick = function () {\n      lines.innerHTML = '';\n      fetch('/clear', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ device: name })\n      }).catch(function () {});\n    };\n\n    footerRight.appendChild(exportBtn);\n    footerRight.appendChild(clearBtn);\n    footer.appendChild(footerLeft);\n    footer.appendChild(footerRight);\n    panel.appendChild(lines);\n    panel.appendChild(footer);\n    logArea.appendChild(panel);\n\n    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, autoScroll: scrollCb };\n\n    scrollCb.onchange = function () {\n      if (scrollCb.checked) lines.scrollTop = lines.scrollHeight;\n    };\n\n    // Activate first device automatically\n    if (!activeDevice) switchTab(name);\n  }\n\n  function switchTab(name) {\n    if (!devices[name]) return;\n\n    // Deactivate current\n    if (activeDevice && devices[activeDevice]) {\n      devices[activeDevice].tab.className = 'tab';\n      devices[activeDevice].panel.className = 'log-panel';\n    }\n\n    activeDevice = name;\n    var d = devices[name];\n    d.tab.className = 'tab active';\n    d.panel.className = 'log-panel active';\n\n    // Clear unread badge\n    d.unread = 0;\n    var badge = d.tab.querySelector('.badge');\n    if (badge) badge.remove();\n\n    // Scroll to bottom if auto-scroll is on\n    if (d.autoScroll.checked) d.lines.scrollTop = d.lines.scrollHeight;\n  }\n\n  function addLog(entry) {\n    var name = entry.device;\n    createDevice(name);\n\n    var d = devices[name];\n    var time = new Date(entry.timestamp);\n    var hh = String(time.getHours()).padStart(2, '0');\n    var mm = String(time.getMinutes()).padStart(2, '0');\n    var ss = String(time.getSeconds()).padStart(2, '0');\n\n    var line = document.createElement('div');\n    line.className = 'log-line';\n    line.textContent = '[' + hh + ':' + mm + ':' + ss + '] ' + entry.message;\n    d.lines.appendChild(line);\n\n    // Auto-scroll if active tab and auto-scroll enabled\n    if (name === activeDevice && d.autoScroll.checked) {\n      d.lines.scrollTop = d.lines.scrollHeight;\n    } else if (name !== activeDevice) {\n      // Increment unread badge\n      d.unread++;\n      var badge = d.tab.querySelector('.badge');\n      if (!badge) {\n        badge = document.createElement('span');\n        badge.className = 'badge';\n        d.tab.appendChild(badge);\n      }\n      badge.textContent = d.unread;\n    }\n  }\n\n  // Load existing logs on page load\n  fetch('/logs')\n    .then(function (res) { return res.json(); })\n    .then(function (logs) {\n      var deviceNames = Object.keys(logs);\n      deviceNames.forEach(function (name) {\n        createDevice(name);\n        logs[name].forEach(function (entry) { addLog(entry); });\n      });\n    })\n    .catch(function () {});\n\n  // Connect WebSocket for live updates\n  var wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';\n  var ws = new WebSocket(wsProto + '//' + location.host + '/ws/logs');\n\n  ws.onmessage = function (evt) {\n    try {\n      var entry = JSON.parse(evt.data);\n      addLog(entry);\n    } catch (e) {}\n  };\n\n  ws.onclose = function () {\n    // Attempt reconnect after 3s\n    setTimeout(function () { location.reload(); }, 3000);\n  };\n})();\n</script>\n\n</body>\n</html>\n`;\nmsg.headers = { 'content-type': 'text/html' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 310,
+        "y": 580,
+        "wires": [
+            [
+                "http_resp_ui"
+            ]
+        ]
+    },
+    {
+        "id": "http_resp_ui",
+        "type": "http response",
+        "z": "logfire_tab",
+        "name": "HTML Response",
+        "statusCode": "200",
+        "headers": {},
+        "x": 510,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "inject_test",
+        "type": "inject",
+        "z": "logfire_tab",
+        "name": "Test: Hello World",
+        "props": [
+            {
+                "p": "payload",
+                "v": "TestDevice: Hello World!",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2",
+        "topic": "",
+        "x": 130,
+        "y": 660,
+        "wires": [
+            [
+                "fn_parse_store"
+            ]
+        ]
+    },
+    {
+        "id": "comment_build",
+        "type": "comment",
+        "z": "logfire_tab",
+        "name": "Build: run 'python build.py' to embed UI HTML",
+        "info": "The fn_serve_ui node contains a placeholder.\nRun 'python build.py' from the nodered/ folder to inject index.html into the flow.\nLogs persist to /data/logfire_logs.json and survive restarts.",
+        "x": 240,
+        "y": 620,
+        "wires": []
+    }
+]
