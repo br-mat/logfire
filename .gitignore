@@ -30,6 +30,8 @@ Thumbs.db
 
 # PlatformIO
 .pio/
+*.bin
+*.elf
 
 # Claude
 .claude/

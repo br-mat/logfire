@@ -13,8 +13,8 @@
 
 #include <LogFire.h>
 
-const char* WIFI_SSID = "XXXXXXXX";
-const char* WIFI_PASS = "XXXXXXXX";
+const char* WIFI_SSID = "YOUR_SSID";
+const char* WIFI_PASS = "YOUR_PASSWORD";
 const char* LOGFIRE_HOST = "10.0.0.XX";
 const uint16_t LOGFIRE_PORT = 1880;
 

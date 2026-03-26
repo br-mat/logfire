@@ -24,42 +24,47 @@ The complexity lives in the hub and the UI, not on your hardware.
 
 ## How it works
 
-```
+```text
 [Your Device]  →  HTTP POST plain text  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
 ```
 
 Each log call sends a single plain text message in the format:
 
-```
+```text
 DEVICENAME: your message here
 ```
 
-Node-RED receives it, parses the device name, timestamps it, stores it in memory, and broadcasts it to any connected browser. Log entries auto-expire after 30 minutes. The browser UI shows a live tab per device.
+Node-RED receives it, parses the device name, timestamps it, stores it in memory, and broadcasts it to any connected browser. Log entries auto-expire after 24 hours. The browser UI shows a live tab per device.
 
 ---
 
 ## Repo structure
 
-```
+```text
 logfire/
 ├── nodered/
-│   ├── flow.json     # Node-RED flow (importable JSON)
-│   ├── index.html    # Browser UI source (vanilla HTML/JS/CSS)
-│   └── build.py      # Embeds index.html into flow.json
+│   ├── flow.json         # Node-RED flow (importable JSON)
+│   ├── logfireUI.html    # Browser UI source (vanilla HTML/JS/CSS)
+│   └── build.py          # Embeds logfireUI.html into flow.json
 ├── arduino/
-│   ├── LogFire/      # Library (ESP8266 / ESP32, drop into PlatformIO lib/)
-│   │   ├── LogFire.h
-│   │   └── LogFire.cpp
-│   └── example/      # PlatformIO example project
-│       ├── platformio.ini
-│       └── src/main.cpp
-└── micropython/      # MicroPython module (Pico W)
-    └── logfire.py
+│   └── LogFire/          # Library — drop into PlatformIO lib/ or Arduino libraries/
+│       ├── LogFire.h
+│       ├── LogFire.cpp
+│       └── examples/
+│           ├── arduinoIDE/arduinoIDE.ino
+│           └── platformio/
+│               ├── platformio.ini
+│               └── src/main.cpp
+└── micropython/          # MicroPython module (Pico W / Pico W2)
+    ├── logfire.py
+    └── example/main.py
 ```
 
 ---
 
 ## Quick start
+
+> For a short step-by-step guide see [HOWTO.md](HOWTO.md).
 
 ### 1. Hub (Node-RED)
 
@@ -83,7 +88,8 @@ LogFire.begin("MyDevice", "192.168.1.100", 1880);
 LogFire.log("Warning: data could not be fetched!");
 ```
 
-### 3. MicroPython (Pico W)
+### 3. MicroPython (Pico W / Pico W2)
+
 Copy `micropython/logfire.py` to your Pico W.
 
 ```python
@@ -99,7 +105,7 @@ logfire.log("Warning: data could not be fetched!")
 ## Design decisions
 
 | Decision | Reason |
-|---|---|
+| --- | --- |
 | HTTP POST over UDP | Slightly more reliable, works through most local network setups without extra config |
 | Plain text body | No JSON parsing needed on the device side |
 | Fire and forget | A dropped log message is acceptable — never worth risking a crash |
@@ -116,7 +122,7 @@ logfire.log("Warning: data could not be fetched!")
 
 - **Hub:** Node-RED (any machine on your local network)
 - **Arduino:** ESP8266 or ESP32 with WiFi connected
-- **MicroPython:** Raspberry Pi Pico W with `urequests` available
+- **MicroPython:** Raspberry Pi Pico W or Pico W2 with `urequests` available
 
 ---
 
