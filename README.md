@@ -8,7 +8,7 @@ Devices send plain text messages over HTTP, a Node-RED flow aggregates and auto-
 
 ## Goal
 
-When developing on microcontrollers, `Serial.print` is your best friend — until your device is wireless, embedded, or across the room. LogFire replaces that habit with a single `log()` call that ships your message over WiFi to a local hub, where you can watch it live in the browser.
+When developing on microcontrollers, `Serial.print` is your best friend — until your device is wireless, embedded, or across the room. LogFire extends that habit with a single `log()` call that prints to Serial *and* ships the message over WiFi to a local hub, where you can watch it live in the browser.
 
 **The guiding principle: keep the controller-side code as lightweight as possible.**
 
@@ -99,6 +99,7 @@ LogFire.begin("MyDevice", "192.168.1.100", 1880);
 LogFire.log("Device booted");              // level 0 (plain)
 LogFire.log("Sensor timeout", 2);          // level 2 (WARN)
 LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
+// LogFire.mirrorSerial(false);            // disable Serial echo (on by default)
 ```
 
 ### 3. MicroPython (Pico W / Pico W2)
@@ -113,6 +114,7 @@ logfire.init("MyPico", "192.168.1.100", 1880)
 logfire.log("Device booted")               # level 0 (plain)
 logfire.log("Sensor timeout", 2)           # level 2 (WARN)
 logfire.log("Flash write failed", 3)       # level 3 (ERROR)
+# logfire.mirror_serial(False)             # disable print echo (on by default)
 ```
 
 ---

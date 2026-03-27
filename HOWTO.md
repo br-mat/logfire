@@ -29,6 +29,12 @@ LogFire.log("something is off", 2);         // level 2 (WARN — yellow)
 
 Log levels: 0 = plain (default), 1 = INFO (green), 2 = WARN (yellow), 3 = ERROR (red), 4 = CRITICAL (purple).
 
+Each `log()` call also prints to Serial by default — same format as the web UI. To disable:
+
+```cpp
+LogFire.mirrorSerial(false);
+```
+
 > WiFi must already be connected. A failed send is silently discarded — your loop never blocks.
 
 See [`arduino/LogFire/examples/`](arduino/LogFire/examples/) for full working examples.
@@ -52,6 +58,12 @@ logfire.log("something is off", 2)          # level 2 (WARN — yellow)
 ```
 
 Log levels: 0 = plain (default), 1 = INFO (green), 2 = WARN (yellow), 3 = ERROR (red), 4 = CRITICAL (purple).
+
+Each `log()` call also prints to the REPL by default. To disable:
+
+```python
+logfire.mirror_serial(False)
+```
 
 > A failed send is silently discarded.
 

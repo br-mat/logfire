@@ -1,6 +1,8 @@
 # Project files
 project_outlines.md
 micropython/MICROPICO.md
+DESIGN.md
+futureIdeas.txt
 
 # Python
 __pycache__/
