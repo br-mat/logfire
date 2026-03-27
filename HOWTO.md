@@ -7,7 +7,7 @@
 3. Deploy the flow
 4. Open `http://<host>:<port>/logfire` in your browser — a test log appears automatically
 
-> Logs persist to `/data/logfire_logs.json` and survive restarts. Entries older than 24h are removed automatically.
+> Logs persist to `/data/logfire_logs.json` and survive restarts. Per-device logs are capped at 3 MB — oldest entries are evicted automatically.
 
 ---
 
@@ -20,11 +20,14 @@
 #include <LogFire.h>
 
 // In setup() — after WiFi is connected
-LogFire.begin("DeviceName", "10.0.0.20", 1880);
+LogFire.begin("DeviceName", "10.0.0.XX", 1880);
 
 // Anywhere in your code
-LogFire.log("your message here");
+LogFire.log("your message here");           // level 0 (plain)
+LogFire.log("something is off", 2);         // level 2 (WARN — yellow)
 ```
+
+Log levels: 0 = plain (default), 1 = INFO (green), 2 = WARN (yellow), 3 = ERROR (red), 4 = CRITICAL (purple).
 
 > WiFi must already be connected. A failed send is silently discarded — your loop never blocks.
 
@@ -41,12 +44,15 @@ See [`arduino/LogFire/examples/`](arduino/LogFire/examples/) for full working ex
 import logfire
 
 # At boot — after WiFi is connected
-logfire.init("DeviceName", "10.0.0.20", 1880)
+logfire.init("DeviceName", "10.0.0.XX", 1880)
 
 # Anywhere in your code
-logfire.log("your message here")
+logfire.log("your message here")            # level 0 (plain)
+logfire.log("something is off", 2)          # level 2 (WARN — yellow)
 ```
 
-> `urequests` must be available on your device. A failed send is silently discarded.
+Log levels: 0 = plain (default), 1 = INFO (green), 2 = WARN (yellow), 3 = ERROR (red), 4 = CRITICAL (purple).
+
+> A failed send is silently discarded.
 
 See [`micropython/example/main.py`](micropython/example/main.py) for a full working example.

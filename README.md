@@ -32,9 +32,20 @@ Each log call sends a single plain text message in the format:
 
 ```text
 DEVICENAME: your message here
+DEVICENAME(-2): something to warn about
 ```
 
-Node-RED receives it, parses the device name, timestamps it, stores it in memory, and broadcasts it to any connected browser. Log entries auto-expire after 24 hours. The browser UI shows a live tab per device.
+An optional log level (0–4) can be attached using the `(-N)` notation. Level 0 (plain) is the default when no level is specified.
+
+| Level | Name | Color |
+| --- | --- | --- |
+| 0 | *(plain)* | white |
+| 1 | INFO | green |
+| 2 | WARN | yellow |
+| 3 | ERROR | red |
+| 4 | CRITICAL | purple |
+
+Node-RED receives it, parses the device name and level, timestamps it, stores it in memory, and broadcasts it to any connected browser. Per-device logs are capped at 3 MB — oldest entries are evicted when the limit is reached. The browser UI shows a live tab per device with a filter dropdown to show only messages at or above a selected level.
 
 ---
 
@@ -74,7 +85,7 @@ cd nodered && python build.py    # embeds the UI into the flow
 
 Import `nodered/flow.json` into your Node-RED instance. The flow serves the UI at `GET /logfire` — no `httpStatic` setup needed. A test inject fires on deploy so you can verify the UI immediately at `http://<host>:<port>/logfire`.
 
-Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts. Entries auto-expire after 24 hours.
+Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts. Per-device logs are capped at 3 MB — oldest entries are automatically evicted.
 
 ### 2. Arduino (PlatformIO)
 
@@ -85,7 +96,9 @@ Copy the `arduino/LogFire` folder into your PlatformIO project's `lib/` director
 
 LogFire.begin("MyDevice", "192.168.1.100", 1880);
 
-LogFire.log("Warning: data could not be fetched!");
+LogFire.log("Device booted");              // level 0 (plain)
+LogFire.log("Sensor timeout", 2);          // level 2 (WARN)
+LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
 ```
 
 ### 3. MicroPython (Pico W / Pico W2)
@@ -97,24 +110,14 @@ import logfire
 
 logfire.init("MyPico", "192.168.1.100", 1880)
 
-logfire.log("Warning: data could not be fetched!")
+logfire.log("Device booted")               # level 0 (plain)
+logfire.log("Sensor timeout", 2)           # level 2 (WARN)
+logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 ```
 
 ---
 
-## Design decisions
-
-| Decision | Reason |
-| --- | --- |
-| HTTP POST over UDP | Slightly more reliable, works through most local network setups without extra config |
-| Plain text body | No JSON parsing needed on the device side |
-| Fire and forget | A dropped log message is acceptable — never worth risking a crash |
-| Node-RED as hub | Visual, easy to modify, serves the UI, handles timers — no custom server code needed |
-| Vanilla JS UI | No build step, no framework, just open and it works |
-| UI embedded in flow | Single file to import — `build.py` merges HTML into the flow so no `httpStatic` setup needed |
-| No library.properties | Minimal file count — PlatformIO picks up the lib folder as-is |
-| File-backed log store | JSON file at `/data/logfire_logs.json` — survives Docker restarts, no database needed |
-| 24h auto-expire | Keeps logs useful without unbounded growth |
+> For architecture and design rationale see [DESIGN.md](DESIGN.md).
 
 ---
 
