@@ -16,7 +16,22 @@ void LogFireClass::begin(const char* deviceName, const char* host, uint16_t port
     _url = "http://" + String(host) + ":" + String(port) + "/log";
 }
 
+static const char* LEVEL_NAMES[] = { "", "INFO", "WARN", "ERROR", "CRITICAL" };
+
+void LogFireClass::mirrorSerial(bool enable) {
+    _mirrorSerial = enable;
+}
+
 void LogFireClass::log(const char* message, uint8_t level) {
+    if (_mirrorSerial) {
+        if (level > 0 && level <= 4) {
+            Serial.print("[");
+            Serial.print(LEVEL_NAMES[level]);
+            Serial.print("] ");
+        }
+        Serial.println(message);
+    }
+
     if (WiFi.status() != WL_CONNECTED) return;
 
     HTTPClient http;
