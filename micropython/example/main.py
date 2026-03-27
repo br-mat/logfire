@@ -22,8 +22,8 @@ def connect_wifi():
 
 wlan = connect_wifi()
 
-logfire.init("MyPico", LOGFIRE_HOST, LOGFIRE_PORT)
-logfire.log("Device booted")
+logfire.init("PicoLog", LOGFIRE_HOST, LOGFIRE_PORT)
+logfire.log("Device booted")  # level 0 (plain) by default
 print("Device booted")
 
 counter = 0
@@ -31,7 +31,12 @@ while True:
     time.sleep(5)
     counter += 1
     if not wlan.isconnected():
+        logfire.log("WiFi lost, reconnecting...", 2)  # WARN
         print("WiFi lost, reconnecting...")
         wlan = connect_wifi()
-    logfire.log("Heartbeat #" + str(counter))
+    lvl = counter % 5  # cycle through 0-4
+    logfire.log("Heartbeat #" + str(counter), lvl)
     print("Heartbeat #" + str(counter))
+    if counter % 10 == 0:
+        logfire.log("Counter milestone: " + str(counter), 3)  # ERROR
+        print("Counter milestone: " + str(counter))

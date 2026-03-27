@@ -16,7 +16,7 @@ void LogFireClass::begin(const char* deviceName, const char* host, uint16_t port
     _url = "http://" + String(host) + ":" + String(port) + "/log";
 }
 
-void LogFireClass::log(const char* message) {
+void LogFireClass::log(const char* message, uint8_t level) {
     if (WiFi.status() != WL_CONNECTED) return;
 
     HTTPClient http;
@@ -30,10 +30,17 @@ void LogFireClass::log(const char* message) {
 
     http.setTimeout(1000);
     http.addHeader("Content-Type", "text/plain");
-    http.POST(_deviceName + ": " + message);
+
+    String body;
+    if (level > 0) {
+        body = _deviceName + "(-" + String(level) + "): " + message;
+    } else {
+        body = _deviceName + ": " + message;
+    }
+    http.POST(body);
     http.end();
 }
 
-void LogFireClass::log(const String& message) {
-    log(message.c_str());
+void LogFireClass::log(const String& message, uint8_t level) {
+    log(message.c_str(), level);
 }

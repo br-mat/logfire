@@ -96,6 +96,22 @@
   }
 
   .log-line { color: #b0b0b0; }
+  .log-line[data-level="1"] { color: #4ec94e; }
+  .log-line[data-level="2"] { color: #e8a032; }
+  .log-line[data-level="3"] { color: #e05555; }
+  .log-line[data-level="4"] { color: #c678dd; font-weight: bold; }
+  .log-line.level-hidden { display: none; }
+
+  .filter-select {
+    background: #222;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 12px;
+  }
 
   .panel-footer {
     padding: 8px 16px;
@@ -150,6 +166,7 @@
 
 <script>
 (function () {
+  var LEVEL_NAMES = { 1: 'INFO', 2: 'WARN', 3: 'ERROR', 4: 'CRITICAL' };
   var devices = {};
   var activeDevice = null;
   var initialLoadComplete = false;
@@ -202,6 +219,24 @@
     footerLeft.appendChild(scrollCb);
     footerLeft.appendChild(scrollLabel);
 
+    var filterSelect = document.createElement('select');
+    filterSelect.className = 'filter-select';
+    var filterOpts = [
+      { value: '0', text: 'ALL' },
+      { value: '1', text: 'INFO+' },
+      { value: '2', text: 'WARN+' },
+      { value: '3', text: 'ERROR+' },
+      { value: '4', text: 'CRITICAL' }
+    ];
+    for (var f = 0; f < filterOpts.length; f++) {
+      var opt = document.createElement('option');
+      opt.value = filterOpts[f].value;
+      opt.textContent = filterOpts[f].text;
+      filterSelect.appendChild(opt);
+    }
+    filterSelect.onchange = function () { applyFilter(name); };
+    footerLeft.appendChild(filterSelect);
+
     var footerRight = document.createElement('div');
     footerRight.className = 'footer-right';
 
@@ -250,7 +285,7 @@
     panel.appendChild(footer);
     logArea.appendChild(panel);
 
-    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, total: 0, autoScroll: scrollCb };
+    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, total: 0, autoScroll: scrollCb, filterSelect: filterSelect };
 
     scrollCb.onchange = function () {
       if (scrollCb.checked) lines.scrollTop = lines.scrollHeight;
@@ -294,9 +329,23 @@
     var mm = String(time.getMinutes()).padStart(2, '0');
     var ss = String(time.getSeconds()).padStart(2, '0');
 
+    var level = entry.level || 0;
+    var levelName = LEVEL_NAMES[level];
+
     var line = document.createElement('div');
     line.className = 'log-line';
-    line.textContent = '[' + hh + ':' + mm + ':' + ss + '] ' + entry.message;
+    line.dataset.level = String(level);
+    if (levelName) {
+      line.textContent = '[' + hh + ':' + mm + ':' + ss + '] [' + levelName + '] ' + entry.message;
+    } else {
+      line.textContent = '[' + hh + ':' + mm + ':' + ss + '] ' + entry.message;
+    }
+
+    var filterMin = parseInt(d.filterSelect.value, 10);
+    if (filterMin > 0 && level < filterMin) {
+      line.classList.add('level-hidden');
+    }
+
     d.lines.appendChild(line);
 
     // Update total count
@@ -317,6 +366,21 @@
         d.tab.appendChild(badge);
       }
       badge.textContent = d.unread;
+    }
+  }
+
+  function applyFilter(deviceName) {
+    var d = devices[deviceName];
+    if (!d) return;
+    var filterMin = parseInt(d.filterSelect.value, 10);
+    var allLines = d.lines.querySelectorAll('.log-line');
+    for (var i = 0; i < allLines.length; i++) {
+      var lineLevel = parseInt(allLines[i].dataset.level, 10) || 1;
+      if (filterMin > 0 && lineLevel < filterMin) {
+        allLines[i].classList.add('level-hidden');
+      } else {
+        allLines[i].classList.remove('level-hidden');
+      }
     }
   }
 

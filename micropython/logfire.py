@@ -6,6 +6,7 @@ Usage:
     import logfire
     logfire.init("MyPico", "10.0.0.XX")
     logfire.log("Device booted")
+    logfire.log("Low battery", 2)   # 0=plain 1=INFO 2=WARN 3=ERROR 4=CRITICAL
 """
 
 import socket
@@ -23,13 +24,16 @@ def init(device_name, host, port=1880):
     _port = port
 
 
-def log(message):
+def log(message, level=0):
     if _host is None:
         return
     s = None
     try:
         gc.collect()
-        payload = "{}: {}".format(_device_name, message)
+        if level > 0:
+            payload = "{}(-{}): {}".format(_device_name, level, message)
+        else:
+            payload = "{}: {}".format(_device_name, message)
         addr = socket.getaddrinfo(_host, _port)[0][-1]
         s = socket.socket()
         s.settimeout(5)

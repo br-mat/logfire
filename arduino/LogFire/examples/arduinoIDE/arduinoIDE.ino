@@ -39,14 +39,15 @@ void setup() {
     }
     Serial.println(" connected!");
 
-    LogFire.begin("MyDevice", LOGFIRE_HOST, LOGFIRE_PORT);
-    LogFire.log("Device booted");
+    LogFire.begin("ArduinoLog", LOGFIRE_HOST, LOGFIRE_PORT);
+    LogFire.log("Device booted");  // level 0 (plain) by default
 }
 
 void loop() {
     if (millis() - lastLog >= 5000) {
         lastLog = millis();
         counter++;
-        LogFire.log("Heartbeat #" + String(counter));
+        uint8_t lvl = counter % 5;  // cycle through 0-4
+        LogFire.log("Heartbeat #" + String(counter), lvl);
     }
 }
