@@ -3,6 +3,15 @@
 
 #include <Arduino.h>
 
+#ifdef ESP32
+  #include <WiFi.h>
+  #include <HTTPClient.h>
+#elif defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <ESP8266HTTPClient.h>
+  #include <WiFiClient.h>
+#endif
+
 class LogFireClass {
 public:
     void begin(const char* deviceName, const char* host, uint16_t port = 1880);
@@ -12,8 +21,20 @@ public:
 
 private:
     String _deviceName;
-    String _url;
+    String _host;
+    uint16_t _port = 1880;
     bool _mirrorSerial = true;
+
+    HTTPClient _http;
+    bool _connected = false;
+
+    #ifdef ESP8266
+    WiFiClient _wifiClient;
+    #endif
+
+    String _buildUrl();
+    void _ensureConnected();
+    void _disconnect();
 };
 
 extern LogFireClass LogFire;

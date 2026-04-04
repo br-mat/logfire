@@ -1,25 +1,43 @@
 #include "LogFire.h"
 
-#ifdef ESP32
-  #include <WiFi.h>
-  #include <HTTPClient.h>
-#elif defined(ESP8266)
-  #include <ESP8266WiFi.h>
-  #include <ESP8266HTTPClient.h>
-  #include <WiFiClient.h>
-#endif
-
 LogFireClass LogFire;
-
-void LogFireClass::begin(const char* deviceName, const char* host, uint16_t port) {
-    _deviceName = deviceName;
-    _url = "http://" + String(host) + ":" + String(port) + "/log";
-}
 
 static const char* LEVEL_NAMES[] = { "", "INFO", "WARN", "ERROR", "CRITICAL" };
 
+void LogFireClass::begin(const char* deviceName, const char* host, uint16_t port) {
+    _deviceName = deviceName;
+    _host = host;
+    _port = port;
+}
+
 void LogFireClass::mirrorSerial(bool enable) {
     _mirrorSerial = enable;
+}
+
+String LogFireClass::_buildUrl() {
+    return "http://" + _host + ":" + String(_port) + "/log";
+}
+
+void LogFireClass::_ensureConnected() {
+    if (!_connected) {
+        String url = _buildUrl();
+        #ifdef ESP32
+          _http.begin(url);
+        #else
+          _http.begin(_wifiClient, url);
+        #endif
+        _http.setTimeout(1000);
+        _http.addHeader("Content-Type", "text/plain");
+        _http.setReuse(true);
+        _connected = true;
+    }
+}
+
+void LogFireClass::_disconnect() {
+    if (_connected) {
+        _http.end();
+        _connected = false;
+    }
 }
 
 void LogFireClass::log(const char* message, uint8_t level) {
@@ -32,19 +50,12 @@ void LogFireClass::log(const char* message, uint8_t level) {
         Serial.println(message);
     }
 
-    if (WiFi.status() != WL_CONNECTED) return;
+    if (WiFi.status() != WL_CONNECTED) {
+        _disconnect();
+        return;
+    }
 
-    HTTPClient http;
-    WiFiClient client;
-
-    #ifdef ESP32
-      http.begin(_url);
-    #else
-      http.begin(client, _url);
-    #endif
-
-    http.setTimeout(1000);
-    http.addHeader("Content-Type", "text/plain");
+    _ensureConnected();
 
     String body;
     if (level > 0) {
@@ -52,8 +63,11 @@ void LogFireClass::log(const char* message, uint8_t level) {
     } else {
         body = _deviceName + ": " + message;
     }
-    http.POST(body);
-    http.end();
+
+    int code = _http.POST(body);
+    if (code < 0) {
+        _disconnect();
+    }
 }
 
 void LogFireClass::log(const String& message, uint8_t level) {
