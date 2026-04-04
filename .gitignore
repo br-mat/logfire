@@ -36,5 +36,8 @@ Thumbs.db
 *.bin
 *.elf
 
+# Suggestions / internal notes
+suggestions/
+
 # Claude
 .claude/
