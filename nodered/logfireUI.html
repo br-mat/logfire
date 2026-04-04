@@ -325,9 +325,13 @@
 
     var d = devices[name];
     var time = new Date(entry.timestamp);
+    var yyyy = String(time.getFullYear());
+    var mo = String(time.getMonth() + 1).padStart(2, '0');
+    var dd = String(time.getDate()).padStart(2, '0');
     var hh = String(time.getHours()).padStart(2, '0');
     var mm = String(time.getMinutes()).padStart(2, '0');
     var ss = String(time.getSeconds()).padStart(2, '0');
+    var ts = yyyy + '-' + mo + '-' + dd + ' ' + hh + ':' + mm + ':' + ss;
 
     var level = entry.level || 0;
     var levelName = LEVEL_NAMES[level];
@@ -336,9 +340,9 @@
     line.className = 'log-line';
     line.dataset.level = String(level);
     if (levelName) {
-      line.textContent = '[' + hh + ':' + mm + ':' + ss + '] [' + levelName + '] ' + entry.message;
+      line.textContent = '[' + ts + '] [' + levelName + '] ' + entry.message;
     } else {
-      line.textContent = '[' + hh + ':' + mm + ':' + ss + '] ' + entry.message;
+      line.textContent = '[' + ts + '] ' + entry.message;
     }
 
     var filterMin = parseInt(d.filterSelect.value, 10);
