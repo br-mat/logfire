@@ -127,7 +127,7 @@ logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 
 - **Hub:** Node-RED (any machine on your local network)
 - **Arduino:** ESP8266 or ESP32 with WiFi connected
-- **MicroPython:** Raspberry Pi Pico W or Pico W2 with `urequests` available
+- **MicroPython:** Raspberry Pi Pico W or Pico W2
 
 ---
 

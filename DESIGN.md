@@ -12,3 +12,5 @@
 | File-backed log store | JSON file at `/data/logfire_logs.json` — survives Docker restarts, no database needed |
 | 3 MB per-device cap | Size-based eviction keeps storage bounded — oldest entries are dropped first |
 | Log levels 0–4 | Optional severity tag (`(-N)` wire format) — plain by default, color-coded in the UI |
+| Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
+| No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
