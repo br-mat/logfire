@@ -14,6 +14,11 @@ void LogFireClass::mirrorSerial(bool enable) {
     _mirrorSerial = enable;
 }
 
+void LogFireClass::localOnly(bool enable) {
+    _localOnly = enable;
+    if (enable) _disconnect();
+}
+
 String LogFireClass::_buildUrl() {
     return "http://" + _host + ":" + String(_port) + "/log";
 }
@@ -50,7 +55,7 @@ void LogFireClass::log(const char* message, uint8_t level) {
         Serial.println(message);
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
+    if (_localOnly || WiFi.status() != WL_CONNECTED) {
         _disconnect();
         return;
     }

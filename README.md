@@ -68,6 +68,7 @@ logfire/
 │               └── src/main.cpp
 └── micropython/          # MicroPython module (Pico W / Pico W2)
     ├── logfire.py
+    ├── test_logfire.py   # dev verification script (standard Python, no Pico needed)
     └── example/main.py
 ```
 
@@ -100,6 +101,7 @@ LogFire.log("Device booted");              // level 0 (plain)
 LogFire.log("Sensor timeout", 2);          // level 2 (WARN)
 LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
 // LogFire.mirrorSerial(false);            // disable Serial echo (on by default)
+// LogFire.localOnly(true);               // Serial only, skip all HTTP/WiFi logic
 ```
 
 ### 3. MicroPython (Pico W / Pico W2)
@@ -115,6 +117,7 @@ logfire.log("Device booted")               # level 0 (plain)
 logfire.log("Sensor timeout", 2)           # level 2 (WARN)
 logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 # logfire.mirror_serial(False)             # disable print echo (on by default)
+# logfire.local_only(True)                 # Serial only, skip all network I/O
 ```
 
 ---

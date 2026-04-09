@@ -18,12 +18,14 @@ public:
     void log(const char* message, uint8_t level = 0);
     void log(const String& message, uint8_t level = 0);
     void mirrorSerial(bool enable);
+    void localOnly(bool enable);
 
 private:
     String _deviceName;
     String _host;
     uint16_t _port = 1880;
     bool _mirrorSerial = true;
+    bool _localOnly = false;
 
     HTTPClient _http;
     bool _connected = false;

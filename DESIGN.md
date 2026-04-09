@@ -14,3 +14,4 @@
 | Log levels 0–4 | Optional severity tag (`(-N)` wire format) — plain by default, color-coded in the UI |
 | Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
 | No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
+| `localOnly` / `local_only` mode | Opt-in flag that bypasses all HTTP/WiFi logic entirely — Serial output only. Solves two cases: offline test builds (no hub reachable) and time-sensitive firmware where the 1 s HTTP timeout on a dead hub is unacceptable. Keeps user code clean — one call at boot, no `#ifdef` guards around every `log()` |

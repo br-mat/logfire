@@ -8,6 +8,7 @@ Usage:
     logfire.log("Device booted")
     logfire.log("Low battery", 2)   # 0=plain 1=INFO 2=WARN 3=ERROR 4=CRITICAL
     logfire.mirror_serial(False)    # disable Serial mirroring (on by default)
+    logfire.local_only(True)        # Serial only, skip all network I/O
 """
 
 import socket
@@ -19,6 +20,7 @@ _device_name = None
 _host = None
 _port = None
 _mirror = True
+_local_only = False
 _sock = None
 _connected = False
 
@@ -33,6 +35,13 @@ def init(device_name, host, port=1880):
 def mirror_serial(enable):
     global _mirror
     _mirror = enable
+
+
+def local_only(enable):
+    global _local_only
+    _local_only = enable
+    if enable:
+        _disconnect()
 
 
 def _ensure_connected():
@@ -66,7 +75,7 @@ def log(message, level=0):
         else:
             print(message)
 
-    if _host is None:
+    if _local_only or _host is None:
         return
 
     try:
