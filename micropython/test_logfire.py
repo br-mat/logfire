@@ -27,7 +27,7 @@ Usage:
   python test_logfire.py --live    # also runs live hub delivery verification
 """
 
-LOGFIRE_HOST = "10.0.0.20"   # set to your hub's IP before running --live
+LOGFIRE_HOST = "10.0.0.XX"   # set to your hub's IP before running --live
 LOGFIRE_PORT = 1880
 
 import sys
