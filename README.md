@@ -2,7 +2,7 @@
 
 > A tiny self-hosted debug logging system for WiFi-connected microcontrollers & IoT Devices.
 
-Devices send plain text messages over HTTP, a Node-RED flow aggregates and auto-expires them, and a vanilla JS browser UI displays live logs in per-device tabs. Includes libraries for Arduino (ESP8266/ESP32) and MicroPython (Pico W).
+Devices send plain text messages over HTTP (TCP) or UDP, a Node-RED flow aggregates and auto-expires them, and a vanilla JS browser UI displays live logs in per-device tabs. Includes libraries for Arduino (ESP8266/ESP32) and MicroPython (Pico W).
 
 ---
 
@@ -16,7 +16,7 @@ When developing on microcontrollers, `Serial.print` is your best friend — unti
 - One function to send a message
 - No acknowledgement, no retry logic, no queue
 - A failed send is silently discarded — it never blocks or crashes your main loop
-- Zero external dependencies on the device beyond the standard WiFi and HTTP libraries
+- Zero external dependencies on the device beyond the standard WiFi/UDP libraries
 
 The complexity lives in the hub and the UI, not on your hardware.
 
@@ -25,7 +25,7 @@ The complexity lives in the hub and the UI, not on your hardware.
 ## How it works
 
 ```text
-[Your Device]  →  HTTP POST plain text  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
+[Your Device]  →  HTTP POST (TCP) or UDP datagram  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
 ```
 
 Each log call sends a single plain text message in the format:
@@ -59,17 +59,23 @@ logfire/
 │   └── build.py          # Embeds logfireUI.html into flow.json
 ├── arduino/
 │   └── LogFire/          # Library — drop into PlatformIO lib/ or Arduino libraries/
-│       ├── LogFire.h
+│       ├── LogFire.h     # TCP variant
 │       ├── LogFire.cpp
+│       ├── LogFireUDP.h  # UDP variant
+│       ├── LogFireUDP.cpp
 │       └── examples/
 │           ├── arduinoIDE/arduinoIDE.ino
+│           ├── arduinoIDE/arduinoIDE_UDP.ino
 │           └── platformio/
 │               ├── platformio.ini
 │               └── src/main.cpp
 └── micropython/          # MicroPython module (Pico W / Pico W2)
-    ├── logfire.py
+    ├── logfire.py        # TCP variant
+    ├── logfire_udp.py    # UDP variant
     ├── test_logfire.py   # dev verification script (standard Python, no Pico needed)
-    └── example/main.py
+    └── example/
+        ├── main.py
+        └── main_udp.py
 ```
 
 ---
@@ -88,10 +94,13 @@ Import `nodered/flow.json` into your Node-RED instance. The flow serves the UI a
 
 Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts. Per-device logs are capped at 3 MB — oldest entries are automatically evicted.
 
+> **Docker / firewall note:** The UDP variants require UDP port 1880 to be open in addition to TCP. In Docker, map both: `-p 1880:1880/tcp -p 1880:1880/udp`. See [HOWTO.md](HOWTO.md) for details.
+
 ### 2. Arduino (PlatformIO)
 
 Copy the `arduino/LogFire` folder into your PlatformIO project's `lib/` directory.
 
+**TCP** — delivery guarantee, 1 s timeout if hub is unreachable:
 ```cpp
 #include <LogFire.h>
 
@@ -104,10 +113,21 @@ LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
 // LogFire.localOnly(true);               // Serial only, skip all HTTP/WiFi logic
 ```
 
+**UDP** *(in progress)* — fire and forget, returns instantly even if hub is unreachable:
+```cpp
+#include <LogFireUDP.h>
+
+LogFireUDP.begin("MyDevice", "192.168.1.100", 1880);
+
+LogFireUDP.log("Device booted");
+LogFireUDP.log("Sensor timeout", 2);
+// LogFireUDP.mirrorSerial(false);
+// LogFireUDP.localOnly(true);
+```
+
 ### 3. MicroPython (Pico W / Pico W2)
 
-Copy `micropython/logfire.py` to your Pico W.
-
+**TCP** — copy `micropython/logfire.py` to your Pico W:
 ```python
 import logfire
 
@@ -118,6 +138,18 @@ logfire.log("Sensor timeout", 2)           # level 2 (WARN)
 logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 # logfire.mirror_serial(False)             # disable print echo (on by default)
 # logfire.local_only(True)                 # Serial only, skip all network I/O
+```
+
+**UDP** *(in progress)* — copy `micropython/logfire_udp.py` to your Pico W:
+```python
+import logfire_udp
+
+logfire_udp.init("MyPico", "192.168.1.100", 1880)
+
+logfire_udp.log("Device booted")
+logfire_udp.log("Sensor timeout", 2)
+# logfire_udp.mirror_serial(False)
+# logfire_udp.local_only(True)
 ```
 
 ---

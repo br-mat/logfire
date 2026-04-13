@@ -15,3 +15,18 @@
 | Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
 | No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
 | `localOnly` / `local_only` mode | Opt-in flag that bypasses all HTTP/WiFi logic entirely — Serial output only. Solves two cases: offline test builds (no hub reachable) and time-sensitive firmware where the 1 s HTTP timeout on a dead hub is unacceptable. Keeps user code clean — one call at boot, no `#ifdef` guards around every `log()` |
+| TCP and UDP variants *(in progress)* | Both transports are offered rather than picking one. TCP (`LogFire` / `logfire`) gives delivery guarantees via the persistent connection — useful when every log line matters. UDP (`LogFireUDP` / `logfire_udp`) returns from `log()` instantly regardless of hub state — useful for time-sensitive firmware. A logger that silently drops is no better than one that occasionally stalls; the right choice depends on the application. UDP hub-side support requires Docker port `1880/udp` to be mapped — not yet fully verified end-to-end |
+
+---
+
+## Trust Model
+
+LogFire assumes all devices on the LAN are trusted. The `/log`, `/logs`, `/devices`, and `/clear` endpoints have no authentication — any device on the same network can send logs or clear them. This is intentional for a private hobby project.
+
+---
+
+## Future Considerations
+
+| Idea | Notes |
+| --- | --- |
+| Custom Docker hub (replace Node-RED) | A lightweight Python server (FastAPI or raw `http.server` + `websockets`) would be self-contained, natively support UDP, eliminate the `build.py` / flow import ritual, and be significantly lighter than a full Node.js runtime. Downside: reimplementing everything Node-RED currently provides for free (HTTP, WebSocket, timers, file persistence, UI serving, log eviction). Worth revisiting if the project grows or the Node-RED dependency becomes a real pain point |

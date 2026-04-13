@@ -9,6 +9,29 @@
 
 > Logs persist to `/data/logfire_logs.json` and survive restarts. Per-device logs are capped at 3 MB — oldest entries are evicted automatically.
 
+### Docker port mapping
+
+If running Node-RED in Docker, expose **both TCP and UDP** on port 1880. TCP is required for the HTTP interface; UDP is required for the `LogFireUDP` / `logfire_udp` variants.
+
+```yaml
+ports:
+  - "1880:1880/tcp"
+  - "1880:1880/udp"
+```
+
+Or with `docker run`:
+
+```bash
+docker run -p 1880:1880/tcp -p 1880:1880/udp nodered/node-red
+```
+
+If your host has a firewall (e.g. `ufw`), open both protocols:
+
+```bash
+sudo ufw allow 1880/tcp
+sudo ufw allow 1880/udp
+```
+
 ---
 
 ## 2. Arduino (ESP32 / ESP8266)
