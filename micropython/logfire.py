@@ -61,7 +61,7 @@ def _disconnect():
     if _sock:
         try:
             _sock.close()
-        except:
+        except OSError:
             pass
     _sock = None
     _connected = False
@@ -86,6 +86,7 @@ def log(message, level=0):
         else:
             payload = "{}: {}".format(_device_name, message)
 
+        body = payload.encode('utf-8')
         request = (
             "POST /log HTTP/1.1\r\n"
             "Host: {}:{}\r\n"
@@ -93,9 +94,8 @@ def log(message, level=0):
             "Content-Length: {}\r\n"
             "Connection: keep-alive\r\n"
             "\r\n"
-            "{}"
-        ).format(_host, _port, len(payload), payload)
-        _sock.send(request.encode())
+        ).format(_host, _port, len(body)).encode('utf-8') + body
+        _sock.send(request)
         _sock.recv(64)
-    except:
+    except OSError:
         _disconnect()
