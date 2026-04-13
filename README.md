@@ -2,6 +2,8 @@
 
 A small debug logging setup I put together for WiFi microcontroller projects. When the device is wireless or across the room, `log()` sends the message over HTTP to a Node-RED hub — you can watch it live in the browser. Serial output is mirrored by default so the existing workflow stays intact. Libraries for Arduino (ESP8266/ESP32) and MicroPython (Pico W).
 
+![LogFire browser UI](logfire.jpg)
+
 ---
 
 ## How it works
