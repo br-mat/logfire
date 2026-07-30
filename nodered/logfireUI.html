@@ -5,82 +5,238 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LogFire</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    color-scheme: dark;
+    --bg: #17191c;
+    --surface: #101214;
+    --surface-raised: #202328;
+    --border: #34383e;
+    --border-strong: #50565f;
+    --text: #d9dde3;
+    --text-muted: #8d949e;
+    --text-faint: #5f6670;
+    --accent: #f0a43b;
+    --accent-muted: #b77926;
+    --success: #53c878;
+    --warning: #e3b341;
+    --danger: #e06060;
+    --critical: #c982e6;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
   body {
-    background: #1a1a1a;
-    color: #d4d4d4;
-    font-family: 'Courier New', monospace;
     height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
     display: flex;
     flex-direction: column;
   }
 
-  header {
-    padding: 12px 16px;
-    background: #111;
-    border-bottom: 1px solid #333;
-    font-size: 18px;
-    font-weight: bold;
-    color: #e8a032;
+  button,
+  select,
+  input {
+    font: inherit;
   }
 
-  #tabs {
+  button:focus-visible,
+  select:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .app-header {
+    min-height: 68px;
+    padding: 0 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     display: flex;
-    background: #111;
-    border-bottom: 1px solid #333;
-    overflow-x: auto;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 24px;
     flex-shrink: 0;
   }
 
-  .tab {
-    padding: 8px 16px;
-    cursor: pointer;
-    border-right: 1px solid #333;
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 19px;
+    font-weight: 700;
+  }
+
+  .brand-mark {
+    width: 4px;
+    height: 26px;
+    background: var(--accent);
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: minmax(126px, 1.4fr) repeat(3, minmax(92px, 1fr));
+    min-width: 520px;
+  }
+
+  .metric {
+    min-width: 0;
+    padding: 10px 16px;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .metric-label {
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    min-width: 0;
+    color: var(--text);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
     white-space: nowrap;
-    color: #888;
-    position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .connection-value {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    flex: 0 0 auto;
+  }
+
+  .connection-dot.live {
+    background: var(--success);
+  }
+
+  .connection-dot.warning {
+    background: var(--warning);
+  }
+
+  .connection-dot.error {
+    background: var(--danger);
+  }
+
+  #notice {
+    min-height: 34px;
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--border);
+    background: #29230f;
+    color: #f0d78c;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  #notice.error {
+    background: #311819;
+    color: #f0a1a1;
+  }
+
+  #notice.success {
+    background: #142a1b;
+    color: #9ce0b0;
+  }
+
+  #notice[hidden] {
+    display: none;
+  }
+
+  #tabs {
+    min-height: 39px;
+    display: flex;
+    overflow-x: auto;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    scrollbar-width: thin;
+  }
+
+  .tab {
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
     user-select: none;
   }
 
-  .tab:hover { color: #ccc; }
+  .tab:hover {
+    background: var(--surface-raised);
+    color: var(--text);
+  }
 
   .tab.active {
-    background: #1a1a1a;
-    color: #e8a032;
-    border-bottom: 2px solid #e8a032;
+    border-bottom-color: var(--accent);
+    background: var(--bg);
+    color: var(--accent);
   }
 
-  .total {
-    color: #666;
-    font-size: 11px;
+  .tab-total {
     margin-left: 6px;
+    color: var(--text-faint);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 11px;
   }
 
-  .tab.active .total {
-    color: #a07828;
+  .tab.active .tab-total {
+    color: var(--accent-muted);
   }
 
   .badge {
-    background: #e8a032;
-    color: #111;
-    font-size: 11px;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 6px;
     padding: 1px 5px;
-    border-radius: 8px;
-    margin-left: 4px;
-    font-weight: bold;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--surface);
+    font-size: 10px;
+    font-weight: 800;
   }
 
   #log-area {
+    min-height: 0;
     flex: 1;
     overflow: hidden;
     position: relative;
   }
 
   .log-panel {
+    height: 100%;
     display: none;
     flex-direction: column;
-    height: 100%;
   }
 
   .log-panel.active {
@@ -88,359 +244,1024 @@
   }
 
   .log-lines {
+    min-height: 0;
     flex: 1;
     overflow-y: auto;
     padding: 12px 16px;
+    font-family: "Courier New", ui-monospace, monospace;
     font-size: 13px;
     line-height: 1.6;
+    scrollbar-color: var(--border-strong) var(--surface);
   }
 
-  .log-line { color: #b0b0b0; }
-  .log-line[data-level="1"] { color: #4ec94e; }
-  .log-line[data-level="2"] { color: #e8a032; }
-  .log-line[data-level="3"] { color: #e05555; }
-  .log-line[data-level="4"] { color: #c678dd; font-weight: bold; }
-  .log-line.level-hidden { display: none; }
+  .log-line {
+    min-height: 21px;
+    color: #b7bdc5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 
-  .filter-select {
-    background: #222;
-    color: #ccc;
-    border: 1px solid #555;
-    padding: 2px 6px;
-    font-family: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    margin-left: 12px;
+  .log-line[data-level="1"] {
+    color: var(--success);
+  }
+
+  .log-line[data-level="2"] {
+    color: var(--warning);
+  }
+
+  .log-line[data-level="3"] {
+    color: var(--danger);
+  }
+
+  .log-line[data-level="4"] {
+    color: var(--critical);
+    font-weight: 700;
+  }
+
+  .log-line.level-hidden {
+    display: none;
   }
 
   .panel-footer {
-    padding: 8px 16px;
-    background: #111;
-    border-top: 1px solid #333;
+    min-height: 46px;
+    padding: 7px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
   }
 
-  .footer-left {
+  .footer-controls,
+  .footer-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: #888;
+    gap: 8px;
   }
 
-  .footer-left input { cursor: pointer; }
+  .checkbox-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
 
-  .footer-right { display: flex; gap: 6px; }
+  .checkbox-control input {
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .render-count {
+    color: var(--text-faint);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .footer-controls {
+    flex-wrap: wrap;
+  }
+
+  .filter-select,
+  .btn {
+    min-height: 30px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .filter-select {
+    padding: 3px 26px 3px 8px;
+    cursor: pointer;
+  }
 
   .btn {
-    background: #333;
-    color: #ccc;
-    border: 1px solid #555;
-    padding: 4px 12px;
+    min-width: 68px;
+    padding: 4px 11px;
     cursor: pointer;
-    font-family: inherit;
-    font-size: 12px;
   }
 
-  .btn:hover { background: #444; }
+  .btn:hover:not(:disabled) {
+    border-color: #6c737d;
+    background: #2c3036;
+  }
+
+  .btn.danger:hover:not(:disabled) {
+    border-color: var(--danger);
+    color: #f08d8d;
+  }
+
+  .btn:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
 
   #placeholder {
+    height: 100%;
+    padding: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
-    color: #555;
-    font-size: 16px;
+    color: var(--text-faint);
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  @media (max-width: 760px) {
+    .app-header {
+      min-height: 0;
+      padding: 0;
+      display: block;
+    }
+
+    .brand {
+      height: 52px;
+      padding: 0 14px;
+    }
+
+    .status-grid {
+      min-width: 0;
+      width: 100%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--border);
+    }
+
+    .metric {
+      min-height: 54px;
+      padding: 8px 10px;
+    }
+
+    .metric:first-child {
+      border-left: 0;
+    }
+
+    .metric-value {
+      font-size: 11px;
+    }
+
+    .panel-footer {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .footer-controls,
+    .footer-actions {
+      justify-content: space-between;
+    }
+
+    .footer-actions .btn {
+      flex: 1;
+    }
+  }
+
+  @media (max-width: 430px) {
+    .metric {
+      padding: 8px 6px;
+    }
+
+    .metric-label {
+      font-size: 9px;
+    }
+
+    .connection-value {
+      gap: 4px;
+    }
+
+    .log-lines {
+      padding: 10px;
+      font-size: 12px;
+    }
   }
 </style>
 </head>
 <body>
 
-<header>LogFire</header>
-<div id="tabs"></div>
-<div id="log-area">
-  <div id="placeholder">Waiting for devices...</div>
-</div>
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>LogFire</span>
+  </div>
+  <div class="status-grid" aria-label="Log status">
+    <div class="metric">
+      <span class="metric-label">Stream</span>
+      <span class="metric-value connection-value">
+        <span id="connection-dot" class="connection-dot warning" aria-hidden="true"></span>
+        <span id="connection-status">Connecting</span>
+      </span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Devices</span>
+      <span id="device-count" class="metric-value">0</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Logs</span>
+      <span id="log-count" class="metric-value">0</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Last log</span>
+      <span id="last-log-time" class="metric-value">--</span>
+    </div>
+  </div>
+</header>
+
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<nav id="tabs" role="tablist" aria-label="Devices"></nav>
+<main id="log-area">
+  <div id="placeholder">Loading logs...</div>
+</main>
 
 <script>
 (function () {
-  var LEVEL_NAMES = { 1: 'INFO', 2: 'WARN', 3: 'ERROR', 4: 'CRITICAL' };
-  var devices = {};
-  var activeDevice = null;
-  var initialLoadComplete = false;
+  "use strict";
 
-  var tabsEl = document.getElementById('tabs');
-  var logArea = document.getElementById('log-area');
-  var placeholder = document.getElementById('placeholder');
+  var LEVEL_NAMES = { 1: "INFO", 2: "WARN", 3: "ERROR", 4: "CRITICAL" };
+  var RECONNECT_MIN_MS = 1000;
+  var RECONNECT_MAX_MS = 15000;
+  var HISTORY_RETRY_MS = 5000;
+  var MAX_RENDERED_LINES = 2000;
+
+  var state = {
+    devices: Object.create(null),
+    activeDevice: null,
+    deviceSequence: 0,
+    historyLoaded: false,
+    historySyncInProgress: false,
+    historySyncRequested: false,
+    queuedEntries: [],
+    seenEntries: Object.create(null),
+    socket: null,
+    reconnectDelay: RECONNECT_MIN_MS,
+    reconnectTimer: null,
+    historyTimer: null,
+    noticeTimer: null
+  };
+
+  var elements = {
+    tabs: document.getElementById("tabs"),
+    logArea: document.getElementById("log-area"),
+    placeholder: document.getElementById("placeholder"),
+    notice: document.getElementById("notice"),
+    connectionDot: document.getElementById("connection-dot"),
+    connectionStatus: document.getElementById("connection-status"),
+    deviceCount: document.getElementById("device-count"),
+    logCount: document.getElementById("log-count"),
+    lastLogTime: document.getElementById("last-log-time")
+  };
+
+  function endpointUrl(path) {
+    return new URL(path, window.location.href).toString();
+  }
+
+  function websocketUrl() {
+    var url = new URL("ws/logs", window.location.href);
+    url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
+  }
+
+  function readMarker(deviceName) {
+    try {
+      return localStorage.getItem("logfire_read_" + deviceName);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeMarker(deviceName, timestamp) {
+    try {
+      localStorage.setItem("logfire_read_" + deviceName, timestamp);
+    } catch (error) {
+      // Read markers are optional; logging must continue without storage access.
+    }
+  }
+
+  function removeMarker(deviceName) {
+    try {
+      localStorage.removeItem("logfire_read_" + deviceName);
+    } catch (error) {
+      // Read markers are optional; clearing logs must still succeed.
+    }
+  }
+
+  function normalizeEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    var device = typeof entry.device === "string" ? entry.device.trim() : "";
+    var timestamp = typeof entry.timestamp === "string" ? entry.timestamp : "";
+    var parsedTime = Date.parse(timestamp);
+    var level = Number(entry.level);
+
+    if (!device || !Number.isFinite(parsedTime)) {
+      return null;
+    }
+
+    if (!Number.isInteger(level) || level < 0 || level > 4) {
+      level = 0;
+    }
+
+    return {
+      id: typeof entry.id === "string" ? entry.id : "",
+      device: device,
+      message: String(entry.message == null ? "" : entry.message),
+      timestamp: timestamp,
+      level: level
+    };
+  }
+
+  function entryKey(entry) {
+    if (entry.id) {
+      return "id:" + entry.id;
+    }
+
+    return "legacy:" + JSON.stringify([
+      entry.device,
+      entry.timestamp,
+      entry.level,
+      entry.message
+    ]);
+  }
+
+  function formatTimestamp(timestamp) {
+    var time = new Date(timestamp);
+    var yyyy = String(time.getFullYear());
+    var month = String(time.getMonth() + 1).padStart(2, "0");
+    var day = String(time.getDate()).padStart(2, "0");
+    var hours = String(time.getHours()).padStart(2, "0");
+    var minutes = String(time.getMinutes()).padStart(2, "0");
+    var seconds = String(time.getSeconds()).padStart(2, "0");
+    return yyyy + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
+  }
+
+  function formatClock(timestamp) {
+    if (!timestamp) {
+      return "--";
+    }
+
+    var time = new Date(timestamp);
+    return (
+      String(time.getHours()).padStart(2, "0") +
+      ":" +
+      String(time.getMinutes()).padStart(2, "0") +
+      ":" +
+      String(time.getSeconds()).padStart(2, "0")
+    );
+  }
+
+  function setConnectionStatus(label, tone) {
+    elements.connectionStatus.textContent = label;
+    elements.connectionDot.className = "connection-dot " + tone;
+  }
+
+  function showNotice(message, tone, autoHide) {
+    window.clearTimeout(state.noticeTimer);
+    elements.notice.textContent = message;
+    elements.notice.className = tone || "";
+    elements.notice.hidden = false;
+
+    if (autoHide) {
+      state.noticeTimer = window.setTimeout(function () {
+        elements.notice.hidden = true;
+      }, 4000);
+    }
+  }
+
+  function clearNotice() {
+    window.clearTimeout(state.noticeTimer);
+    elements.notice.hidden = true;
+    elements.notice.textContent = "";
+    elements.notice.className = "";
+  }
+
+  function updatePlaceholder() {
+    var deviceNames = Object.keys(state.devices);
+    if (deviceNames.length > 0) {
+      elements.placeholder.style.display = "none";
+      return;
+    }
+
+    elements.placeholder.style.display = "flex";
+    elements.placeholder.textContent = state.historyLoaded
+      ? "No logs received yet."
+      : "Loading logs...";
+  }
+
+  function updateDashboard() {
+    var deviceNames = Object.keys(state.devices);
+    var activeDevices = 0;
+    var totalLogs = 0;
+    var lastTimestamp = "";
+
+    for (var i = 0; i < deviceNames.length; i++) {
+      var device = state.devices[deviceNames[i]];
+      totalLogs += device.total;
+      if (device.total > 0) {
+        activeDevices++;
+      }
+      if (device.lastTimestamp > lastTimestamp) {
+        lastTimestamp = device.lastTimestamp;
+      }
+    }
+
+    elements.deviceCount.textContent = String(activeDevices);
+    elements.logCount.textContent = totalLogs.toLocaleString();
+    elements.lastLogTime.textContent = formatClock(lastTimestamp);
+    elements.lastLogTime.title = lastTimestamp
+      ? formatTimestamp(lastTimestamp)
+      : "No logs received";
+    updatePlaceholder();
+  }
+
+  function updateDeviceCounts(device) {
+    device.totalElement.textContent = "(" + device.total.toLocaleString() + ")";
+    device.renderCount.textContent =
+      device.total > device.rendered
+        ? "Latest " +
+          device.rendered.toLocaleString() +
+          " / " +
+          device.total.toLocaleString()
+        : "";
+  }
+
+  function scrollToLatest(device) {
+    window.requestAnimationFrame(function () {
+      if (
+        state.activeDevice === device.name &&
+        device.autoScroll.checked
+      ) {
+        device.lines.scrollTop = device.lines.scrollHeight;
+      }
+    });
+  }
+
+  function createBadge(device) {
+    var badge = device.tab.querySelector(".badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "badge";
+      device.tab.appendChild(badge);
+    }
+    badge.textContent = String(device.unread);
+  }
+
+  function clearUnread(device) {
+    device.unread = 0;
+    var badge = device.tab.querySelector(".badge");
+    if (badge) {
+      badge.remove();
+    }
+  }
 
   function createDevice(name) {
-    if (devices[name]) return;
+    if (state.devices[name]) {
+      return state.devices[name];
+    }
 
-    placeholder.style.display = 'none';
+    state.deviceSequence++;
+    var controlId = "device-" + state.deviceSequence;
 
-    // Tab
-    var tab = document.createElement('div');
-    tab.className = 'tab';
-    tab.dataset.device = name;
+    var tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "tab";
+    tab.id = controlId + "-tab";
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", controlId + "-panel");
+    tab.setAttribute("aria-selected", "false");
 
-    var tabName = document.createElement('span');
-    tabName.className = 'tab-name';
+    var tabName = document.createElement("span");
     tabName.textContent = name;
     tab.appendChild(tabName);
 
-    var totalBadge = document.createElement('span');
-    totalBadge.className = 'total';
-    totalBadge.textContent = '(0)';
-    tab.appendChild(totalBadge);
-    tab.onclick = function () { switchTab(name); };
-    tabsEl.appendChild(tab);
+    var total = document.createElement("span");
+    total.className = "tab-total";
+    total.textContent = "(0)";
+    tab.appendChild(total);
+    elements.tabs.appendChild(tab);
 
-    // Panel
-    var panel = document.createElement('div');
-    panel.className = 'log-panel';
+    var panel = document.createElement("section");
+    panel.className = "log-panel";
+    panel.id = controlId + "-panel";
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
 
-    var lines = document.createElement('div');
-    lines.className = 'log-lines';
+    var lines = document.createElement("div");
+    lines.className = "log-lines";
+    lines.setAttribute("aria-live", "off");
 
-    var footer = document.createElement('div');
-    footer.className = 'panel-footer';
+    var footer = document.createElement("footer");
+    footer.className = "panel-footer";
 
-    var footerLeft = document.createElement('div');
-    footerLeft.className = 'footer-left';
-    var scrollCb = document.createElement('input');
-    scrollCb.type = 'checkbox';
-    scrollCb.checked = true;
-    scrollCb.id = 'scroll-' + name;
-    var scrollLabel = document.createElement('label');
-    scrollLabel.htmlFor = scrollCb.id;
-    scrollLabel.textContent = 'Auto-scroll';
-    footerLeft.appendChild(scrollCb);
-    footerLeft.appendChild(scrollLabel);
+    var controls = document.createElement("div");
+    controls.className = "footer-controls";
 
-    var filterSelect = document.createElement('select');
-    filterSelect.className = 'filter-select';
-    var filterOpts = [
-      { value: '0', text: 'ALL' },
-      { value: '1', text: 'INFO+' },
-      { value: '2', text: 'WARN+' },
-      { value: '3', text: 'ERROR+' },
-      { value: '4', text: 'CRITICAL' }
+    var scrollControl = document.createElement("label");
+    scrollControl.className = "checkbox-control";
+    var scrollCheckbox = document.createElement("input");
+    scrollCheckbox.type = "checkbox";
+    scrollCheckbox.checked = true;
+    scrollControl.appendChild(scrollCheckbox);
+    scrollControl.appendChild(document.createTextNode("Auto-scroll"));
+
+    var filter = document.createElement("select");
+    filter.className = "filter-select";
+    filter.setAttribute("aria-label", "Minimum log level for " + name);
+
+    var filterOptions = [
+      { value: "0", text: "ALL" },
+      { value: "1", text: "INFO+" },
+      { value: "2", text: "WARN+" },
+      { value: "3", text: "ERROR+" },
+      { value: "4", text: "CRITICAL" }
     ];
-    for (var f = 0; f < filterOpts.length; f++) {
-      var opt = document.createElement('option');
-      opt.value = filterOpts[f].value;
-      opt.textContent = filterOpts[f].text;
-      filterSelect.appendChild(opt);
+
+    for (var i = 0; i < filterOptions.length; i++) {
+      var option = document.createElement("option");
+      option.value = filterOptions[i].value;
+      option.textContent = filterOptions[i].text;
+      filter.appendChild(option);
     }
-    filterSelect.onchange = function () { applyFilter(name); };
-    footerLeft.appendChild(filterSelect);
 
-    var footerRight = document.createElement('div');
-    footerRight.className = 'footer-right';
+    controls.appendChild(scrollControl);
+    controls.appendChild(filter);
 
-    var exportBtn = document.createElement('button');
-    exportBtn.className = 'btn';
-    exportBtn.textContent = 'Export';
-    exportBtn.onclick = function () {
-      var text = '';
-      var logLines = lines.querySelectorAll('.log-line');
-      for (var i = 0; i < logLines.length; i++) {
-        text += logLines[i].textContent + '\n';
-      }
-      var blob = new Blob([text], { type: 'text/plain' });
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = name + '_logs.txt';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    };
+    var renderCount = document.createElement("span");
+    renderCount.className = "render-count";
+    controls.appendChild(renderCount);
 
-    var clearBtn = document.createElement('button');
-    clearBtn.className = 'btn';
-    clearBtn.textContent = 'Clear';
-    clearBtn.onclick = function () {
-      lines.innerHTML = '';
-      var d = devices[name];
-      d.total = 0;
-      d.unread = 0;
-      var totalBadge = d.tab.querySelector('.total');
-      if (totalBadge) totalBadge.textContent = '(0)';
-      var badge = d.tab.querySelector('.badge');
-      if (badge) badge.remove();
-      localStorage.removeItem('logfire_read_' + name);
-      fetch('/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device: name })
-      }).catch(function () {});
-    };
+    var actions = document.createElement("div");
+    actions.className = "footer-actions";
 
-    footerRight.appendChild(exportBtn);
-    footerRight.appendChild(clearBtn);
-    footer.appendChild(footerLeft);
-    footer.appendChild(footerRight);
+    var exportButton = document.createElement("button");
+    exportButton.type = "button";
+    exportButton.className = "btn";
+    exportButton.textContent = "Export";
+
+    var clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "btn danger";
+    clearButton.textContent = "Clear";
+
+    actions.appendChild(exportButton);
+    actions.appendChild(clearButton);
+    footer.appendChild(controls);
+    footer.appendChild(actions);
     panel.appendChild(lines);
     panel.appendChild(footer);
-    logArea.appendChild(panel);
+    elements.logArea.appendChild(panel);
 
-    devices[name] = { tab: tab, panel: panel, lines: lines, unread: 0, total: 0, autoScroll: scrollCb, filterSelect: filterSelect };
-
-    scrollCb.onchange = function () {
-      if (scrollCb.checked) lines.scrollTop = lines.scrollHeight;
+    var device = {
+      name: name,
+      tab: tab,
+      totalElement: total,
+      panel: panel,
+      lines: lines,
+      filter: filter,
+      renderCount: renderCount,
+      autoScroll: scrollCheckbox,
+      clearButton: clearButton,
+      unread: 0,
+      total: 0,
+      rendered: 0,
+      lastTimestamp: ""
     };
+    state.devices[name] = device;
 
-    // Activate first device automatically
-    if (!activeDevice) switchTab(name);
+    tab.addEventListener("click", function () {
+      switchTab(name);
+    });
+    filter.addEventListener("change", function () {
+      applyFilter(name);
+    });
+    scrollCheckbox.addEventListener("change", function () {
+      if (scrollCheckbox.checked) {
+        scrollToLatest(device);
+      }
+    });
+    exportButton.addEventListener("click", function () {
+      exportDevice(name);
+    });
+    clearButton.addEventListener("click", function () {
+      clearDevice(name);
+    });
+
+    if (!state.activeDevice) {
+      switchTab(name);
+    }
+
+    updatePlaceholder();
+    return device;
   }
 
   function switchTab(name) {
-    if (!devices[name]) return;
-
-    // Deactivate current
-    if (activeDevice && devices[activeDevice]) {
-      devices[activeDevice].tab.className = 'tab';
-      devices[activeDevice].panel.className = 'log-panel';
+    var nextDevice = state.devices[name];
+    if (!nextDevice) {
+      return;
     }
 
-    activeDevice = name;
-    var d = devices[name];
-    d.tab.className = 'tab active';
-    d.panel.className = 'log-panel active';
+    if (state.activeDevice && state.devices[state.activeDevice]) {
+      var currentDevice = state.devices[state.activeDevice];
+      currentDevice.tab.classList.remove("active");
+      currentDevice.tab.setAttribute("aria-selected", "false");
+      currentDevice.panel.classList.remove("active");
+    }
 
-    // Clear unread badge and persist read state
-    d.unread = 0;
-    var badge = d.tab.querySelector('.badge');
-    if (badge) badge.remove();
-    localStorage.setItem('logfire_read_' + name, new Date().toISOString());
+    state.activeDevice = name;
+    nextDevice.tab.classList.add("active");
+    nextDevice.tab.setAttribute("aria-selected", "true");
+    nextDevice.panel.classList.add("active");
+    clearUnread(nextDevice);
 
-    // Scroll to bottom if auto-scroll is on
-    if (d.autoScroll.checked) d.lines.scrollTop = d.lines.scrollHeight;
+    if (nextDevice.lastTimestamp) {
+      writeMarker(name, nextDevice.lastTimestamp);
+    }
+
+    if (nextDevice.autoScroll.checked) {
+      scrollToLatest(nextDevice);
+    }
   }
 
-  function addLog(entry) {
-    var name = entry.device;
-    createDevice(name);
-
-    var d = devices[name];
-    var time = new Date(entry.timestamp);
-    var yyyy = String(time.getFullYear());
-    var mo = String(time.getMonth() + 1).padStart(2, '0');
-    var dd = String(time.getDate()).padStart(2, '0');
-    var hh = String(time.getHours()).padStart(2, '0');
-    var mm = String(time.getMinutes()).padStart(2, '0');
-    var ss = String(time.getSeconds()).padStart(2, '0');
-    var ts = yyyy + '-' + mo + '-' + dd + ' ' + hh + ':' + mm + ':' + ss;
-
-    var level = entry.level || 0;
-    var levelName = LEVEL_NAMES[level];
-
-    var line = document.createElement('div');
-    line.className = 'log-line';
-    line.dataset.level = String(level);
-    if (levelName) {
-      line.textContent = '[' + ts + '] [' + levelName + '] ' + entry.message;
-    } else {
-      line.textContent = '[' + ts + '] ' + entry.message;
+  function appendEntry(
+    rawEntry,
+    isLive,
+    deferDashboardUpdate,
+    countTowardTotal
+  ) {
+    var entry = normalizeEntry(rawEntry);
+    if (!entry) {
+      return false;
     }
 
-    var filterMin = parseInt(d.filterSelect.value, 10);
-    if (filterMin > 0 && level < filterMin) {
-      line.classList.add('level-hidden');
+    var key = entryKey(entry);
+    if (state.seenEntries[key]) {
+      return false;
+    }
+    state.seenEntries[key] = entry.device;
+
+    var device = createDevice(entry.device);
+    var line = document.createElement("div");
+    line.className = "log-line";
+    line.dataset.level = String(entry.level);
+    line.dataset.entryKey = key;
+
+    var levelName = LEVEL_NAMES[entry.level];
+    line.textContent =
+      "[" +
+      formatTimestamp(entry.timestamp) +
+      "] " +
+      (levelName ? "[" + levelName + "] " : "") +
+      entry.message;
+
+    var filterMinimum = parseInt(device.filter.value, 10);
+    if (filterMinimum > 0 && entry.level < filterMinimum) {
+      line.classList.add("level-hidden");
     }
 
-    d.lines.appendChild(line);
+    device.lines.appendChild(line);
+    device.rendered++;
+    if (countTowardTotal !== false) {
+      device.total++;
+    }
 
-    // Update total count
-    d.total++;
-    var totalBadge = d.tab.querySelector('.total');
-    if (totalBadge) totalBadge.textContent = '(' + d.total + ')';
-
-    // Auto-scroll if active tab and auto-scroll enabled
-    if (name === activeDevice && d.autoScroll.checked) {
-      d.lines.scrollTop = d.lines.scrollHeight;
-    } else if (name !== activeDevice && initialLoadComplete) {
-      // Increment unread badge (only for live messages)
-      d.unread++;
-      var badge = d.tab.querySelector('.badge');
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'badge';
-        d.tab.appendChild(badge);
+    while (device.rendered > MAX_RENDERED_LINES) {
+      var oldestLine = device.lines.firstElementChild;
+      if (!oldestLine) {
+        break;
       }
-      badge.textContent = d.unread;
+      delete state.seenEntries[oldestLine.dataset.entryKey];
+      oldestLine.remove();
+      device.rendered--;
+    }
+
+    if (!(deferDashboardUpdate && countTowardTotal === false)) {
+      updateDeviceCounts(device);
+    }
+    if (entry.timestamp > device.lastTimestamp) {
+      device.lastTimestamp = entry.timestamp;
+    }
+
+    if (entry.device === state.activeDevice) {
+      writeMarker(entry.device, entry.timestamp);
+      if (device.autoScroll.checked && !deferDashboardUpdate) {
+        scrollToLatest(device);
+      }
+    } else if (isLive && state.historyLoaded) {
+      device.unread++;
+      createBadge(device);
+    }
+
+    if (!deferDashboardUpdate) {
+      updateDashboard();
+    }
+    return true;
+  }
+
+  function applyFilter(name) {
+    var device = state.devices[name];
+    if (!device) {
+      return;
+    }
+
+    var filterMinimum = parseInt(device.filter.value, 10);
+    var lines = device.lines.querySelectorAll(".log-line");
+
+    for (var i = 0; i < lines.length; i++) {
+      var lineLevel = parseInt(lines[i].dataset.level, 10);
+      if (!Number.isInteger(lineLevel)) {
+        lineLevel = 0;
+      }
+      lines[i].classList.toggle(
+        "level-hidden",
+        filterMinimum > 0 && lineLevel < filterMinimum
+      );
     }
   }
 
-  function applyFilter(deviceName) {
-    var d = devices[deviceName];
-    if (!d) return;
-    var filterMin = parseInt(d.filterSelect.value, 10);
-    var allLines = d.lines.querySelectorAll('.log-line');
-    for (var i = 0; i < allLines.length; i++) {
-      var lineLevel = parseInt(allLines[i].dataset.level, 10) || 1;
-      if (filterMin > 0 && lineLevel < filterMin) {
-        allLines[i].classList.add('level-hidden');
-      } else {
-        allLines[i].classList.remove('level-hidden');
+  function exportDevice(name) {
+    var device = state.devices[name];
+    if (!device) {
+      return;
+    }
+
+    var visibleLines = device.lines.querySelectorAll(
+      ".log-line:not(.level-hidden)"
+    );
+    var output = [];
+    for (var i = 0; i < visibleLines.length; i++) {
+      output.push(visibleLines[i].textContent);
+    }
+
+    var blob = new Blob([output.join("\n") + (output.length ? "\n" : "")], {
+      type: "text/plain;charset=utf-8"
+    });
+    var downloadUrl = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = name.replace(/[^a-z0-9._-]+/gi, "_") + "_logs.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () {
+      URL.revokeObjectURL(downloadUrl);
+    }, 0);
+  }
+
+  function resetDevice(device) {
+    var seenKeys = Object.keys(state.seenEntries);
+    for (var i = 0; i < seenKeys.length; i++) {
+      if (state.seenEntries[seenKeys[i]] === device.name) {
+        delete state.seenEntries[seenKeys[i]];
       }
     }
+
+    device.lines.textContent = "";
+    device.total = 0;
+    device.rendered = 0;
+    device.unread = 0;
+    device.lastTimestamp = "";
+    updateDeviceCounts(device);
+    clearUnread(device);
+    removeMarker(device.name);
+    updateDashboard();
   }
 
-  // Load existing logs on page load
-  fetch('/logs')
-    .then(function (res) { return res.json(); })
-    .then(function (logs) {
-      var deviceNames = Object.keys(logs);
-      deviceNames.forEach(function (name) {
-        createDevice(name);
-        logs[name].forEach(function (entry) { addLog(entry); });
-      });
+  function clearDevice(name) {
+    var device = state.devices[name];
+    if (!device || device.clearButton.disabled) {
+      return;
+    }
 
-      // Restore unread badges from localStorage
-      deviceNames.forEach(function (name) {
-        if (name === activeDevice) return;
-        var d = devices[name];
-        var lastRead = localStorage.getItem('logfire_read_' + name);
-        var unreadCount = 0;
-        if (!lastRead) {
-          // Never viewed — all messages are unread
-          unreadCount = d.total;
-        } else {
-          var entries = logs[name] || [];
-          for (var i = 0; i < entries.length; i++) {
-            if (entries[i].timestamp > lastRead) unreadCount++;
-          }
-        }
-        if (unreadCount > 0) {
-          d.unread = unreadCount;
-          var badge = document.createElement('span');
-          badge.className = 'badge';
-          badge.textContent = unreadCount;
-          d.tab.appendChild(badge);
-        }
-      });
+    if (!window.confirm("Clear all stored logs for " + name + "?")) {
+      return;
+    }
 
-      initialLoadComplete = true;
+    device.clearButton.disabled = true;
+    fetch(endpointUrl("clear"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device: name })
     })
-    .catch(function () {});
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("Clear request returned HTTP " + response.status);
+        }
+        resetDevice(device);
+        showNotice("Cleared stored logs for " + name + ".", "success", true);
+        syncHistory();
+      })
+      .catch(function () {
+        showNotice(
+          "Could not clear logs for " + name + ". The stored logs were not changed.",
+          "error",
+          false
+        );
+      })
+      .finally(function () {
+        device.clearButton.disabled = false;
+      });
+  }
 
-  // Connect WebSocket for live updates
-  var wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  var ws = new WebSocket(wsProto + '//' + location.host + '/ws/logs');
+  function restoreUnreadCounts(logs) {
+    var deviceNames = Object.keys(logs);
 
-  ws.onmessage = function (evt) {
+    for (var i = 0; i < deviceNames.length; i++) {
+      var name = deviceNames[i];
+      if (name === state.activeDevice || !state.devices[name]) {
+        continue;
+      }
+
+      var lastRead = readMarker(name);
+      var entries = Array.isArray(logs[name]) ? logs[name] : [];
+      var unread = 0;
+
+      for (var j = 0; j < entries.length; j++) {
+        if (!lastRead || entries[j].timestamp > lastRead) {
+          unread++;
+        }
+      }
+
+      if (unread > 0) {
+        state.devices[name].unread = unread;
+        createBadge(state.devices[name]);
+      }
+    }
+  }
+
+  function flushQueuedEntries() {
+    var queued = state.queuedEntries;
+    state.queuedEntries = [];
+
+    for (var i = 0; i < queued.length; i++) {
+      appendEntry(queued[i], true, true);
+    }
+    updateDashboard();
+    if (state.activeDevice && state.devices[state.activeDevice]) {
+      scrollToLatest(state.devices[state.activeDevice]);
+    }
+  }
+
+  function scheduleHistorySync(delay) {
+    window.clearTimeout(state.historyTimer);
+    state.historyTimer = window.setTimeout(syncHistory, delay);
+  }
+
+  function syncHistory() {
+    if (state.historySyncInProgress) {
+      state.historySyncRequested = true;
+      return;
+    }
+
+    state.historySyncInProgress = true;
+    window.clearTimeout(state.historyTimer);
+    var firstLoad = !state.historyLoaded;
+
+    fetch(endpointUrl("logs"), { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("History request returned HTTP " + response.status);
+        }
+        return response.json();
+      })
+      .then(function (logs) {
+        if (!logs || Array.isArray(logs) || typeof logs !== "object") {
+          throw new Error("History response is not an object");
+        }
+
+        var deviceNames = Object.keys(logs);
+        for (var i = 0; i < deviceNames.length; i++) {
+          var deviceName = deviceNames[i];
+          var entries = Array.isArray(logs[deviceName])
+            ? logs[deviceName]
+            : [];
+          var device = createDevice(deviceName);
+          var firstRenderedIndex = Math.max(
+            0,
+            entries.length - MAX_RENDERED_LINES
+          );
+
+          for (var j = firstRenderedIndex; j < entries.length; j++) {
+            appendEntry(entries[j], !firstLoad, true, false);
+          }
+
+          device.total = entries.length;
+          updateDeviceCounts(device);
+        }
+
+        if (firstLoad) {
+          restoreUnreadCounts(logs);
+        }
+
+        state.historyLoaded = true;
+        flushQueuedEntries();
+        clearNotice();
+      })
+      .catch(function () {
+        if (!state.historyLoaded) {
+          state.historyLoaded = true;
+          flushQueuedEntries();
+        }
+        showNotice(
+          "Stored log history is unavailable. Live messages will continue when the stream is connected.",
+          "error",
+          false
+        );
+        scheduleHistorySync(HISTORY_RETRY_MS);
+      })
+      .finally(function () {
+        state.historySyncInProgress = false;
+        updateDashboard();
+        if (state.historySyncRequested) {
+          state.historySyncRequested = false;
+          scheduleHistorySync(0);
+        }
+      });
+  }
+
+  function scheduleReconnect() {
+    if (state.reconnectTimer) {
+      return;
+    }
+
+    var delay = state.reconnectDelay;
+    state.reconnectDelay = Math.min(state.reconnectDelay * 2, RECONNECT_MAX_MS);
+    state.reconnectTimer = window.setTimeout(function () {
+      state.reconnectTimer = null;
+      connectWebSocket();
+    }, delay);
+  }
+
+  function connectWebSocket() {
+    if (
+      state.socket &&
+      (state.socket.readyState === WebSocket.OPEN ||
+        state.socket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    setConnectionStatus(
+      state.historyLoaded ? "Reconnecting" : "Connecting",
+      "warning"
+    );
+
+    var socket;
     try {
-      var entry = JSON.parse(evt.data);
-      addLog(entry);
-    } catch (e) {}
-  };
+      socket = new WebSocket(websocketUrl());
+    } catch (error) {
+      setConnectionStatus("Offline", "error");
+      scheduleReconnect();
+      return;
+    }
 
-  ws.onclose = function () {
-    // Attempt reconnect after 3s
-    setTimeout(function () { location.reload(); }, 3000);
-  };
+    state.socket = socket;
+
+    socket.addEventListener("open", function () {
+      state.reconnectDelay = RECONNECT_MIN_MS;
+      setConnectionStatus("Live", "live");
+      syncHistory();
+    });
+
+    socket.addEventListener("message", function (event) {
+      try {
+        var entry = JSON.parse(event.data);
+        if (!state.historyLoaded || state.historySyncInProgress) {
+          state.queuedEntries.push(entry);
+        } else {
+          appendEntry(entry, true, false);
+        }
+      } catch (error) {
+        showNotice(
+          "A live message could not be read. Waiting for the next history sync.",
+          "error",
+          false
+        );
+      }
+    });
+
+    socket.addEventListener("error", function () {
+      setConnectionStatus("Connection error", "error");
+    });
+
+    socket.addEventListener("close", function () {
+      if (state.socket === socket) {
+        state.socket = null;
+      }
+      setConnectionStatus("Reconnecting", "warning");
+      scheduleReconnect();
+      scheduleHistorySync(RECONNECT_MIN_MS);
+    });
+  }
+
+  updateDashboard();
+  connectWebSocket();
+  scheduleHistorySync(1200);
 })();
 </script>
 
