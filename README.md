@@ -30,6 +30,21 @@ The device name and log level are added by the library — you only pass the mes
 | 4 | CRITICAL | purple |
 
 Node-RED receives it, parses the device name and level, timestamps it, and stores it in memory. Logs can be observed live at `http://<node-red-host>:1880/logfire`. Per-device logs are capped at 3 MB — oldest entries are evicted when the limit is reached. The browser UI shows a live tab per device with a filter dropdown.
+To keep large histories responsive, each browser tab renders the latest 2,000
+retained entries while preserving the complete retained count.
+
+---
+
+## Transport status
+
+| Transport | Node-RED hub | Bundled clients | Status |
+| --- | --- | --- | --- |
+| HTTP over TCP | Yes | Arduino and MicroPython | Supported |
+| UDP | Yes, input on UDP port 1880 | Not yet included | Experimental |
+
+The UDP input is already part of `nodered/flow.json` and uses the same parser and
+storage path as HTTP. The project is not end-to-end UDP capable until UDP sender
+implementations are added and tested for Arduino and MicroPython.
 
 ---
 
@@ -39,7 +54,9 @@ Node-RED receives it, parses the device name and level, timestamps it, and store
 
 ### 1. Hub (Node-RED)
 
-Run `python nodered/build.py` to embed the UI into the flow, then import `nodered/flow.json` into Node-RED. The flow serves the UI at `GET /logfire`.
+Run `python nodered/build.py` to embed the UI and maintained Function-node
+sources into the flow, then import `nodered/flow.json` into Node-RED. The flow
+serves the UI at `GET /logfire`.
 
 Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts.
 
@@ -76,6 +93,20 @@ logfire.log("Sensor timeout", 2)           # level 2 (WARN)
 ```
 
 See [`micropython/example/main.py`](micropython/example/main.py) for a full example.
+
+---
+
+## Network scope and security
+
+LogFire is intended for a private, trusted local network. Its HTTP, WebSocket,
+and UDP interfaces have no authentication or encryption. Do not expose Node-RED
+port `1880` to the public internet, configure router port forwarding for it, or
+place it on an untrusted network.
+
+When Node-RED runs in Docker, bind published ports to the host's LAN address and
+restrict access to the local subnet with the host firewall. UDP packets can be
+forged, lost, duplicated, or reordered, so UDP remains appropriate only for
+best-effort debug logs.
 
 ---
 
