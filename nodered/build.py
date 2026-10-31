@@ -1,6 +1,6 @@
 """
 Build script for LogFire.
-Reads index.html and embeds it into flow.json
+Reads logfireUI.html and embeds it into flow.json
 so the flow serves the UI directly at GET /logfire.
 
 Usage: python build.py  (run from nodered/ folder)
@@ -39,7 +39,8 @@ def build():
         return False
 
     with open(FLOW_PATH, "w", encoding="utf-8") as f:
-        json.dump(flow, f, indent=4, ensure_ascii=False)
+        json.dump(flow, f, indent=2, ensure_ascii=False)
+        f.write("\n")
 
     print(f"OK: embedded {len(html)} bytes of HTML into {FLOW_PATH}")
     return True

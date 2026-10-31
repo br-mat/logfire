@@ -379,7 +379,7 @@
     var filterMin = parseInt(d.filterSelect.value, 10);
     var allLines = d.lines.querySelectorAll('.log-line');
     for (var i = 0; i < allLines.length; i++) {
-      var lineLevel = parseInt(allLines[i].dataset.level, 10) || 1;
+      var lineLevel = parseInt(allLines[i].dataset.level, 10) || 0;
       if (filterMin > 0 && lineLevel < filterMin) {
         allLines[i].classList.add('level-hidden');
       } else {
