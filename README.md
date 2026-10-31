@@ -65,7 +65,7 @@ logfire/
 │       ├── LogFireUDP.cpp
 │       └── examples/
 │           ├── arduinoIDE/arduinoIDE.ino
-│           ├── arduinoIDE/arduinoIDE_UDP.ino
+│           ├── arduinoIDE_UDP/arduinoIDE_UDP.ino
 │           └── platformio/
 │               ├── platformio.ini
 │               └── src/main.cpp
@@ -113,7 +113,7 @@ LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
 // LogFire.localOnly(true);               // Serial only, skip all HTTP/WiFi logic
 ```
 
-**UDP** *(in progress)* — fire and forget, returns instantly even if hub is unreachable:
+**UDP** — fire and forget, without waiting for a hub response:
 ```cpp
 #include <LogFireUDP.h>
 
@@ -140,7 +140,7 @@ logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 # logfire.local_only(True)                 # Serial only, skip all network I/O
 ```
 
-**UDP** *(in progress)* — copy `micropython/logfire_udp.py` to your Pico W:
+**UDP** — copy `micropython/logfire_udp.py` to your Pico W:
 ```python
 import logfire_udp
 

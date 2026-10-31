@@ -5,10 +5,10 @@ Verifies logfire.py (TCP) and logfire_udp.py (UDP) on standard CPython (no Pico 
 Not intended for deployment — the example/ folder contains the usage reference.
 
 TCP Tests:
-  1.  local_only skips network (proved by timing against unreachable host)
+  1.  local_only skips DNS and socket creation (mock proof)
   2.  local_only stdout format (captured and verified)
   3.  mirror_serial=False produces no output (captured and verified)
-  4.  local_only=False restores normal network path (timing proof)
+  4.  local_only=False restores normal network path (mock proof)
   5.  local_only(True) disconnects existing socket (state check)
 
 UDP Tests:
@@ -17,10 +17,11 @@ UDP Tests:
   8.  mirror_serial=False produces no output (captured and verified)
   9.  local_only(False) clears flag (state check)
   10. socket created at init() (state check)
+       Reinitialization closes the previous socket; loopback verifies all levels.
 
 Live Tests (--live only, requires hub at LOGFIRE_HOST:LOGFIRE_PORT):
   11. TCP: sends 4 levels to pylog-tcp, verifies all arrived on hub via /logs
-  12. UDP: same to pylog-udp — expected failure until Node-RED UDP listener is in flow
+  12. UDP: same to pylog-udp (requires UDP port 1880 to be reachable)
 
 Usage:
   python test_logfire.py           # runs unit tests only
@@ -35,12 +36,15 @@ import io
 import time
 import urllib.request
 import json
+import socket
+from unittest.mock import patch
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fresh():
     """Reset TCP module state between tests."""
     if "logfire" in sys.modules:
+        sys.modules["logfire"]._disconnect()
         del sys.modules["logfire"]
     import logfire
     return logfire
@@ -48,6 +52,9 @@ def fresh():
 def fresh_udp():
     """Reset UDP module state between tests."""
     if "logfire_udp" in sys.modules:
+        sock = sys.modules["logfire_udp"]._sock
+        if sock is not None:
+            sock.close()
         del sys.modules["logfire_udp"]
     import logfire_udp
     return logfire_udp
@@ -106,25 +113,23 @@ def verify_delivery(tag, device, expected_levels, wait=1.0):
 
 # ── TCP Unit Tests ─────────────────────────────────────────────────────────────
 
-# Test 1: local_only skips network (timing proof)
+# Test 1: local_only skips network (mock proof)
 print("\nTest 1: local_only skips network entirely (TCP)")
 lf = fresh()
-lf.init("TestDevice", "10.0.255.254", 1880)  # routable but unreachable
+lf.init("TestDevice", "127.0.0.1", 1880)
 lf.local_only(True)
 lf.mirror_serial(False)
 
-t0 = time.time()
-for _ in range(10):
-    lf.log("should be instant", 1)
-elapsed = time.time() - t0
-# If local_only is broken and tries to connect, it would stall for seconds.
-check("10 log() calls complete in <0.1s with unreachable host", elapsed < 0.1)
+with patch.object(socket, "getaddrinfo") as resolve, patch.object(socket, "socket") as create:
+    for _ in range(10):
+        lf.log("local only", 1)
+    check("local_only skips DNS and socket creation", not resolve.called and not create.called)
 
 
 # Test 2: local_only stdout format (TCP)
 print("\nTest 2: local_only stdout format (TCP)")
 lf = fresh()
-lf.init("TestDevice", "10.0.255.254", 1880)
+lf.init("TestDevice", "127.0.0.1", 1880)
 lf.local_only(True)
 
 out = capture(lambda: (
@@ -160,12 +165,13 @@ lf.local_only(True)
 lf.mirror_serial(False)
 lf.log("local only")
 
-lf.local_only(False)
-lf.mirror_serial(False)
-t0 = time.time()
-lf.log("now tries network")   # TCP connect to unreachable host -- will stall/timeout
-elapsed = time.time() - t0
-check("network path re-enabled after local_only(False) (took >0.5s)", elapsed > 0.5)
+addr = ("127.0.0.1", 1880)
+with patch.object(socket, "getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 0, "", addr)]), patch.object(socket, "socket") as create:
+    lf.local_only(False)
+    lf.log("now tries network")
+    sock = create.return_value
+    check("network path reconnects after local_only(False)", sock.connect.call_args is not None and sock.connect.call_args.args == (addr,))
+    check("restored network path sends the log", sock.send.called and b"now tries network" in sock.send.call_args.args[0])
 
 
 # Test 5: local_only(True) disconnects existing socket (TCP)
@@ -191,6 +197,8 @@ class MockSock:
         self.called = False
     def sendto(self, data, addr):
         self.called = True
+    def close(self):
+        pass
 
 
 # Test 6: local_only skips sendto (mock proof, UDP)
@@ -203,6 +211,7 @@ lf.mirror_serial(False)
 
 import logfire_udp as _lf_udp_mod
 mock = MockSock()
+_lf_udp_mod._sock.close()
 _lf_udp_mod._sock = mock
 
 lf.local_only(True)
@@ -260,6 +269,33 @@ lf.init("TestDevice", "10.0.255.254", 1880)
 check("_sock is not None after init()", _lf_udp_mod3._sock is not None)
 
 
+print("\nUDP socket reinitialization")
+old_sock = lf._sock
+lf.init("NewDevice", "127.0.0.1", 1880)
+check("reinitialization closes the old socket", old_sock.fileno() == -1)
+check("reinitialization creates a usable replacement", lf._sock.fileno() >= 0)
+
+
+print("\nUDP loopback delivery")
+lf = fresh_udp()
+lf.mirror_serial(False)
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+    receiver.bind(("127.0.0.1", 0))
+    receiver.settimeout(1)
+    lf.init("Loopback", "127.0.0.1", receiver.getsockname()[1])
+    for level in range(5):
+        message = "temperature: 23\u00b0C"
+        lf.log(message, level)
+        prefix = "Loopback(-{})".format(level) if level else "Loopback"
+        expected = "{}: {}".format(prefix, message).encode("utf-8")
+        try:
+            received = receiver.recvfrom(4096)[0]
+        except socket.timeout:
+            received = None
+        check("UTF-8 datagram delivered at level {}".format(level), received == expected)
+lf._sock.close()
+
+
 # ── Live Delivery Tests ────────────────────────────────────────────────────────
 
 if "--live" not in sys.argv:
@@ -290,7 +326,7 @@ else:
 
     # ── Test 12: UDP live delivery ─────────────────────────────────────────────
     print(f"\nTest 12: UDP live delivery -> {UDP_DEVICE} (run {RUN_ID})")
-    print("  NOTE: expected failure until Node-RED UDP listener is imported to flow")
+    print("  Requires UDP port 1880 to be reachable on the hub")
     lf = fresh_udp()
     lf.init(UDP_DEVICE, LOGFIRE_HOST, LOGFIRE_PORT)
     lf.mirror_serial(False)
