@@ -15,7 +15,7 @@
 | Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
 | No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
 | `localOnly` / `local_only` mode | Opt-in flag that bypasses all HTTP/WiFi logic entirely — Serial output only. Solves two cases: offline test builds (no hub reachable) and time-sensitive firmware where the 1 s HTTP timeout on a dead hub is unacceptable. Keeps user code clean — one call at boot, no `#ifdef` guards around every `log()` |
-| TCP and UDP variants *(in progress)* | Both transports are offered rather than picking one. TCP (`LogFire` / `logfire`) gives delivery guarantees via the persistent connection — useful when every log line matters. UDP (`LogFireUDP` / `logfire_udp`) returns from `log()` instantly regardless of hub state — useful for time-sensitive firmware. A logger that silently drops is no better than one that occasionally stalls; the right choice depends on the application. UDP hub-side support requires Docker port `1880/udp` to be mapped — not yet fully verified end-to-end |
+| UDP hub input *(experimental)* | The Node-RED flow accepts UDP on port 1880, but the bundled Arduino and MicroPython clients currently use TCP. A future UDP client could avoid HTTP timeout stalls in time-sensitive firmware. UDP requires Docker port `1880/udp` to be mapped and is not yet verified end-to-end. |
 
 ---
 

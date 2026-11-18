@@ -1,41 +1,25 @@
-# 🔥 LogFire
+# LogFire
 
-> A tiny self-hosted debug logging system for WiFi-connected microcontrollers & IoT Devices.
+A small debug logging setup I put together for WiFi microcontroller projects. When the device is wireless or across the room, `log()` sends the message over HTTP to a Node-RED hub — you can watch it live in the browser. Serial output is mirrored by default so the existing workflow stays intact. Libraries for Arduino (ESP8266/ESP32) and MicroPython (Pico W).
 
-Devices send plain text messages over HTTP (TCP) or UDP, a Node-RED flow aggregates and auto-expires them, and a vanilla JS browser UI displays live logs in per-device tabs. Includes libraries for Arduino (ESP8266/ESP32) and MicroPython (Pico W).
-
----
-
-## Goal
-
-When developing on microcontrollers, `Serial.print` is your best friend — until your device is wireless, embedded, or across the room. LogFire extends that habit with a single `log()` call that prints to Serial *and* ships the message over WiFi to a local hub, where you can watch it live in the browser.
-
-**The guiding principle: keep the controller-side code as lightweight as possible.**
-
-- One setup call at boot
-- One function to send a message
-- No acknowledgement, no retry logic, no queue
-- A failed send is silently discarded — it never blocks or crashes your main loop
-- Zero external dependencies on the device beyond the standard WiFi/UDP libraries
-
-The complexity lives in the hub and the UI, not on your hardware.
+![LogFire browser UI](logfire.jpg)
 
 ---
 
 ## How it works
 
 ```text
-[Your Device]  →  HTTP POST (TCP) or UDP datagram  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
+[Your Device]  →  HTTP POST plain text  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
 ```
 
-Each log call sends a single plain text message in the format:
+The library formats each message automatically before sending:
 
 ```text
 DEVICENAME: your message here
 DEVICENAME(-2): something to warn about
 ```
 
-An optional log level (0–4) can be attached using the `(-N)` notation. Level 0 (plain) is the default when no level is specified.
+The device name and log level are added by the library — you only pass the message string and an optional level integer to `log()`.
 
 | Level | Name | Color |
 | --- | --- | --- |
@@ -45,62 +29,42 @@ An optional log level (0–4) can be attached using the `(-N)` notation. Level 0
 | 3 | ERROR | red |
 | 4 | CRITICAL | purple |
 
-Node-RED receives it, parses the device name and level, timestamps it, stores it in memory, and broadcasts it to any connected browser. Per-device logs are capped at 3 MB — oldest entries are evicted when the limit is reached. The browser UI shows a live tab per device with a filter dropdown to show only messages at or above a selected level.
+Node-RED receives it, parses the device name and level, timestamps it, and stores it in memory. Logs can be observed live at `http://<node-red-host>:1880/logfire`. Per-device logs are capped at 3 MB — oldest entries are evicted when the limit is reached. The browser UI shows a live tab per device with a filter dropdown.
+To keep large histories responsive, each browser tab renders the latest 2,000
+retained entries while preserving the complete retained count.
 
 ---
 
-## Repo structure
+## Transport status
 
-```text
-logfire/
-├── nodered/
-│   ├── flow.json         # Node-RED flow (importable JSON)
-│   ├── logfireUI.html    # Browser UI source (vanilla HTML/JS/CSS)
-│   └── build.py          # Embeds logfireUI.html into flow.json
-├── arduino/
-│   └── LogFire/          # Library — drop into PlatformIO lib/ or Arduino libraries/
-│       ├── LogFire.h     # TCP variant
-│       ├── LogFire.cpp
-│       ├── LogFireUDP.h  # UDP variant
-│       ├── LogFireUDP.cpp
-│       └── examples/
-│           ├── arduinoIDE/arduinoIDE.ino
-│           ├── arduinoIDE_UDP/arduinoIDE_UDP.ino
-│           └── platformio/
-│               ├── platformio.ini
-│               └── src/main.cpp
-└── micropython/          # MicroPython module (Pico W / Pico W2)
-    ├── logfire.py        # TCP variant
-    ├── logfire_udp.py    # UDP variant
-    ├── test_logfire.py   # dev verification script (standard Python, no Pico needed)
-    └── example/
-        ├── main.py
-        └── main_udp.py
-```
+| Transport | Node-RED hub | Bundled clients | Status |
+| --- | --- | --- | --- |
+| HTTP over TCP | Yes, `POST /log` | `LogFire` (Arduino), `logfire.py` (MicroPython) | Supported |
+| UDP | Yes, input on UDP port 1880 | `LogFireUDP` (Arduino), `logfire_udp.py` (MicroPython) | Experimental |
+
+Both transports use the same message format, parser and storage path. UDP is
+fire and forget: `log()` never waits for the hub, but messages can be lost or
+arrive out of order. Use it for time-sensitive firmware, and HTTP when every
+message should arrive.
 
 ---
 
 ## Quick start
 
-> For a short step-by-step guide see [HOWTO.md](HOWTO.md).
+> For a step-by-step guide see [HOWTO.md](HOWTO.md).
 
 ### 1. Hub (Node-RED)
 
-```bash
-cd nodered && python build.py    # embeds the UI into the flow
-```
+Run `python nodered/build.py` to embed the UI and maintained Function-node
+sources into the flow, then import `nodered/flow.json` into Node-RED. The flow
+serves the UI at `GET /logfire`.
 
-Import `nodered/flow.json` into your Node-RED instance. The flow serves the UI at `GET /logfire` — no `httpStatic` setup needed. A test inject fires on deploy so you can verify the UI immediately at `http://<host>:<port>/logfire`.
+Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts.
 
-Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts. Per-device logs are capped at 3 MB — oldest entries are automatically evicted.
+### 2. Arduino (ESP32 / ESP8266)
 
-> **Docker / firewall note:** The UDP variants require UDP port 1880 to be open in addition to TCP. In Docker, map both: `-p 1880:1880/tcp -p 1880:1880/udp`. See [HOWTO.md](HOWTO.md) for details.
+Copy `arduino/LogFire/` into your project's `lib/` directory.
 
-### 2. Arduino (PlatformIO)
-
-Copy the `arduino/LogFire` folder into your PlatformIO project's `lib/` directory.
-
-**TCP** — delivery guarantee, 1 s timeout if hub is unreachable:
 ```cpp
 #include <LogFire.h>
 
@@ -108,12 +72,12 @@ LogFire.begin("MyDevice", "192.168.1.100", 1880);
 
 LogFire.log("Device booted");              // level 0 (plain)
 LogFire.log("Sensor timeout", 2);          // level 2 (WARN)
-LogFire.log("Flash write failed", 3);      // level 3 (ERROR)
 // LogFire.mirrorSerial(false);            // disable Serial echo (on by default)
-// LogFire.localOnly(true);               // Serial only, skip all HTTP/WiFi logic
+// LogFire.localOnly(true);               // Serial only, no network
 ```
 
 **UDP** — fire and forget, without waiting for a hub response:
+
 ```cpp
 #include <LogFireUDP.h>
 
@@ -125,9 +89,12 @@ LogFireUDP.log("Sensor timeout", 2);
 // LogFireUDP.localOnly(true);
 ```
 
+See [`arduino/LogFire/examples/`](arduino/LogFire/examples/) for full examples (TCP and UDP).
+
 ### 3. MicroPython (Pico W / Pico W2)
 
-**TCP** — copy `micropython/logfire.py` to your Pico W:
+Copy `micropython/logfire.py` to your Pico W:
+
 ```python
 import logfire
 
@@ -135,12 +102,12 @@ logfire.init("MyPico", "192.168.1.100", 1880)
 
 logfire.log("Device booted")               # level 0 (plain)
 logfire.log("Sensor timeout", 2)           # level 2 (WARN)
-logfire.log("Flash write failed", 3)       # level 3 (ERROR)
 # logfire.mirror_serial(False)             # disable print echo (on by default)
-# logfire.local_only(True)                 # Serial only, skip all network I/O
+# logfire.local_only(True)                 # Serial only, no network
 ```
 
 **UDP** — copy `micropython/logfire_udp.py` to your Pico W:
+
 ```python
 import logfire_udp
 
@@ -152,9 +119,22 @@ logfire_udp.log("Sensor timeout", 2)
 # logfire_udp.local_only(True)
 ```
 
+See [`micropython/example/main.py`](micropython/example/main.py) (TCP) and
+[`micropython/example/main_udp.py`](micropython/example/main_udp.py) (UDP) for full examples.
+
 ---
 
-> For architecture and design rationale see [DESIGN.md](DESIGN.md).
+## Network scope and security
+
+LogFire is intended for a private, trusted local network. Its HTTP, WebSocket,
+and UDP interfaces have no authentication or encryption. Do not expose Node-RED
+port `1880` to the public internet, configure router port forwarding for it, or
+place it on an untrusted network.
+
+When Node-RED runs in Docker, bind published ports to the host's LAN address and
+restrict access to the local subnet with the host firewall. UDP packets can be
+forged, lost, duplicated, or reordered, so UDP remains appropriate only for
+best-effort debug logs.
 
 ---
 
