@@ -42,3 +42,7 @@ suggestions/
 
 # Claude
 .claude/
+
+# Agents / local scratch
+.agent-lock
+.tmp/
