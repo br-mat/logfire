@@ -21,10 +21,10 @@ Logs are stored in `/data/logfire_logs.json` inside the Docker container and loa
 
 ### Docker port mapping
 
-The bundled Arduino and MicroPython clients use TCP. The Node-RED flow also
-contains an experimental UDP listener; expose UDP only when using a compatible
-external UDP sender. The UDP input is a core Node-RED node, so it does not
-require a Node-RED reinstall.
+The default clients (`LogFire`, `logfire.py`) use HTTP over TCP. The UDP clients
+(`LogFireUDP`, `logfire_udp.py`) send to the flow's UDP listener on the same port
+number, so expose `1880/udp` only when you use them. The UDP input is a core
+Node-RED node, so it does not require a Node-RED reinstall.
 
 If the hub runs in Docker, adding UDP normally requires recreating the container
 with an explicit UDP mapping. Export all active flows and verify that the
@@ -91,11 +91,31 @@ For Serial-only logging without network traffic (useful during development witho
 LogFire.localOnly(true);
 ```
 
-If a send fails, the connection is closed and retried on the next call. A
+If a send fails, the message is discarded and the next call attempts a new connection. A
 network request can wait for the configured one-second HTTP timeout, so use
-`localOnly(true)` or avoid network logging in time-critical code.
+`localOnly(true)`, the UDP variant below, or avoid network logging in time-critical code.
 
-See [`arduino/LogFire/examples/`](arduino/LogFire/examples/) for full working examples.
+### UDP variant (experimental)
+
+`LogFireUDP` has the same API but sends each message as a single UDP packet without
+waiting for a hub response. Packets can be lost, duplicated or reordered. DNS
+lookup and socket operations can still take time; this is not a guaranteed
+nonblocking API. The hub must expose `1880/udp` (see Docker port mapping).
+
+```cpp
+#include <LogFireUDP.h>
+
+LogFireUDP.begin("DeviceName", "10.0.0.XX", 1880);
+LogFireUDP.log("something is off", 2);
+// LogFireUDP.mirrorSerial(false);
+// LogFireUDP.localOnly(true);
+```
+
+If WiFi is not connected, the network send is skipped. Serial mirroring follows
+the `mirrorSerial` setting.
+
+See [`arduino/LogFire/examples/`](arduino/LogFire/examples/) for full working examples
+(`arduinoIDE/` and `platformio/` for TCP, `arduinoIDE_UDP/` for UDP).
 
 ---
 
@@ -133,6 +153,32 @@ For Serial-only logging without network traffic:
 logfire.local_only(True)
 ```
 
-If a send fails, the connection is closed and retried on the next call.
+If a send fails, the message is discarded and the next call attempts a new
+connection. Socket operations use a five-second timeout.
 
-See [`micropython/example/main.py`](micropython/example/main.py) for a full working example.
+### UDP variant (experimental)
+
+`logfire_udp.py` has the same API (`init`, `log`, `mirror_serial`, `local_only`)
+and sends each message as one UDP packet without waiting for a hub response.
+The same delivery and timing limitations as the Arduino UDP client apply.
+Copy it instead of, or next to, `logfire.py`:
+
+```python
+import logfire_udp
+
+logfire_udp.init("DeviceName", "10.0.0.XX", 1880)
+logfire_udp.log("something is off", 2)
+```
+
+See [`micropython/example/main.py`](micropython/example/main.py) (TCP) and
+[`micropython/example/main_udp.py`](micropython/example/main_udp.py) (UDP) for full working examples.
+
+### Testing without a Pico
+
+`micropython/test_logfire.py` runs both clients on standard Python. Without
+arguments it runs the unit tests. With `--live` it also sends to a running hub and
+checks delivery via `/logs`. Set `LOGFIRE_HOST` in the script first.
+
+```bash
+cd micropython && python test_logfire.py --live
+```

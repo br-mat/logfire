@@ -2,7 +2,7 @@
 
 | Decision | Reason |
 | --- | --- |
-| HTTP POST over UDP | Slightly more reliable, works through most local network setups without extra config |
+| HTTP POST as the default transport | Works through most local network setups without extra config; UDP is available as an optional transport |
 | Plain text body | No JSON parsing needed on the device side |
 | Fire and forget | A dropped log message is acceptable — never worth risking a crash |
 | Node-RED as hub | Visual, easy to modify, serves the UI, handles timers — no custom server code needed |
@@ -15,7 +15,7 @@
 | Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
 | No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
 | `localOnly` / `local_only` mode | Opt-in flag that bypasses all HTTP/WiFi logic entirely — Serial output only. Solves two cases: offline test builds (no hub reachable) and time-sensitive firmware where the 1 s HTTP timeout on a dead hub is unacceptable. Keeps user code clean — one call at boot, no `#ifdef` guards around every `log()` |
-| UDP hub input *(experimental)* | The Node-RED flow accepts UDP on port 1880, but the bundled Arduino and MicroPython clients currently use TCP. A future UDP client could avoid HTTP timeout stalls in time-sensitive firmware. UDP requires Docker port `1880/udp` to be mapped and is not yet verified end-to-end. |
+| UDP transport *(experimental)* | Optional `LogFireUDP` / `logfire_udp.py` clients send one packet per message to the flow's UDP input on port 1880, using the same wire format, parser and storage as HTTP. They do not wait for a hub response, but DNS and socket operations can still take time. Packets may be lost, duplicated or reordered. HTTP stays the default; neither transport queues or retries failed messages. Requires `1880/udp` to be exposed by the hub. |
 
 ---
 

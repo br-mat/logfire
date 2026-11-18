@@ -9,7 +9,7 @@ A small debug logging setup I put together for WiFi microcontroller projects. Wh
 ## How it works
 
 ```text
-[Your Device]  →  HTTP POST plain text  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
+[Your Device]  →  HTTP POST or UDP plain text  →  [Node-RED Hub]  →  WebSocket  →  [Browser UI]
 ```
 
 The library formats each message automatically before sending:
@@ -42,10 +42,11 @@ retained entries while preserving the complete retained count.
 | HTTP over TCP | Yes, `POST /log` | `LogFire` (Arduino), `logfire.py` (MicroPython) | Supported |
 | UDP | Yes, input on UDP port 1880 | `LogFireUDP` (Arduino), `logfire_udp.py` (MicroPython) | Experimental |
 
-Both transports use the same message format, parser and storage path. UDP is
-fire and forget: `log()` never waits for the hub, but messages can be lost or
-arrive out of order. Use it for time-sensitive firmware, and HTTP when every
-message should arrive.
+Both transports use the same message format, parser and storage path. UDP sends
+without waiting for a hub response; packets can be lost, duplicated or reordered.
+DNS lookup and socket operations can still take time. HTTP waits for a response,
+but neither client queues or retries failed messages, so neither transport
+guarantees delivery. UDP delivery from physical boards remains unverified.
 
 ---
 
