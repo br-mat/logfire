@@ -71,8 +71,29 @@ for (var i = 0; i < mergedDeviceNames.length; i++) {
     });
 }
 
+// Apply the per-device cap and record sizes for "Parse & Store".
+var MAX_BYTES_PER_DEVICE = 3 * 1024 * 1024;
+var logBytes = Object.create(null);
+function entryBytes(entry) {
+    return Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
+}
+for (var k = 0; k < mergedDeviceNames.length; k++) {
+    var name = mergedDeviceNames[k];
+    var list = mergedLogs[name];
+    var size = 0;
+    for (var m = 0; m < list.length; m++) {
+        size += entryBytes(list[m]);
+    }
+    while (size > MAX_BYTES_PER_DEVICE && list.length > 1) {
+        size -= entryBytes(list.shift());
+    }
+    logBytes[name] = size;
+}
+
 flow.set("logs", mergedLogs);
+flow.set("logBytes", logBytes);
 flow.set("pendingLogs", {});
+flow.set("logsDirty", true);   // persist the merged store via "Save logs"
 flow.set("logfireReady", true);
 
 if (savedDataWasValid) {
@@ -83,5 +104,4 @@ if (savedDataWasValid) {
     );
 }
 
-msg.payload = JSON.stringify(mergedLogs);
-return msg;
+return null;

@@ -1,24 +1,38 @@
+var MAX_BYTES_PER_DEVICE = 3 * 1024 * 1024;
 var raw = msg.payload;
 
 function reject(message) {
     if (!msg.res) {
-        return [null, null, null];
+        return [null, null];
     }
 
     msg.statusCode = 400;
     msg.headers = { "content-type": "text/plain; charset=utf-8" };
     msg.payload = message;
-    return [msg, null, null];
+    return [msg, null];
 }
 
-if (typeof raw !== "string" || raw.indexOf(":") === -1) {
+function entryBytes(entry) {
+    // Same measure as the size-limit and restore functions: JSON + separator.
+    return Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
+}
+
+if (typeof raw !== "string") {
+    return reject("Bad format. Expected DEVICE: message");
+}
+
+// Senders like println() or nc add a trailing newline; it is not part of the message.
+raw = raw.replace(/[\r\n]+$/, "");
+
+if (raw.indexOf(":") === -1) {
     return reject("Bad format. Expected DEVICE: message");
 }
 
 var level = 0;
 var device;
 var message;
-var match = raw.match(/^(.+?)\(-(\d)\):\s*(.*)$/);
+// The device name and level are on the first line; the message may span lines.
+var match = raw.match(/^([^\r\n]+?)\(-(\d)\):[ \t]*([\s\S]*)$/);
 
 if (match) {
     device = match[1].trim();
@@ -38,6 +52,7 @@ var reservedDeviceNames = ["__proto__", "constructor", "prototype"];
 if (
     !device ||
     device.length > 64 ||
+    /[\u0000-\u001f\u007f]/.test(device) ||
     reservedDeviceNames.indexOf(device) !== -1
 ) {
     return reject("Invalid device name");
@@ -58,20 +73,33 @@ var entry = {
     level: level
 };
 
-var storeIsReady = flow.get("logfireReady") === true;
-var targetStore = storeIsReady
-    ? flow.get("logs") || {}
-    : flow.get("pendingLogs") || {};
+if (flow.get("logfireReady") === true) {
+    var logs = flow.get("logs") || {};
+    var logBytes = flow.get("logBytes") || {};
 
-if (!Object.prototype.hasOwnProperty.call(targetStore, device)) {
-    targetStore[device] = [];
-}
-targetStore[device].push(entry);
+    if (!Object.prototype.hasOwnProperty.call(logs, device)) {
+        logs[device] = [];
+        logBytes[device] = 0;
+    }
+    logs[device].push(entry);
+    logBytes[device] = (logBytes[device] || 0) + entryBytes(entry);
 
-if (storeIsReady) {
-    flow.set("logs", targetStore);
+    // Enforce the per-device cap on every insert, oldest entries first.
+    while (logBytes[device] > MAX_BYTES_PER_DEVICE && logs[device].length > 1) {
+        logBytes[device] -= entryBytes(logs[device].shift());
+    }
+
+    flow.set("logs", logs);
+    flow.set("logBytes", logBytes);
+    flow.set("logsDirty", true);   // persisted by "Save logs" (atomic, at most every 2 s)
 } else {
-    flow.set("pendingLogs", targetStore);
+    // Startup: buffer until "Restore to context" has merged the saved file.
+    var pending = flow.get("pendingLogs") || {};
+    if (!Object.prototype.hasOwnProperty.call(pending, device)) {
+        pending[device] = [];
+    }
+    pending[device].push(entry);
+    flow.set("pendingLogs", pending);
 }
 
 var httpMessage = null;
@@ -83,9 +111,4 @@ if (msg.res) {
     httpMessage = msg;
 }
 
-var websocketMessage = { payload: entry };
-var fileMessage = storeIsReady
-    ? { payload: JSON.stringify(targetStore) }
-    : null;
-
-return [httpMessage, websocketMessage, fileMessage];
+return [httpMessage, { payload: entry }];

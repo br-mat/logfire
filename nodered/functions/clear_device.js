@@ -28,13 +28,16 @@ if (flow.get("logfireReady") !== true) {
 }
 
 var logs = flow.get("logs") || {};
+var logBytes = flow.get("logBytes") || {};
 delete logs[device];
+delete logBytes[device];
 flow.set("logs", logs);
+flow.set("logBytes", logBytes);
+flow.set("logsDirty", true);   // persisted by "Save logs"
 
 // Preserve msg.req/msg.res from the HTTP In node for HTTP Response.
 msg.statusCode = 200;
 msg.headers = { "content-type": "text/plain; charset=utf-8" };
 msg.payload = "OK";
 
-var fileMessage = { payload: JSON.stringify(logs) };
-return [msg, fileMessage];
+return msg;
