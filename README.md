@@ -151,9 +151,12 @@ best-effort debug logs.
 
 ## Requirements
 
-- **Hub:** Node-RED (any machine on your local network)
+- **Hub:** Node-RED (any machine on your local network; tested with 5.0.10)
+- **Flow build:** Python 3 to run `nodered/build.py` before importing the flow
 - **Arduino:** ESP8266 or ESP32 with WiFi connected
 - **MicroPython:** Raspberry Pi Pico W or Pico W2
+
+Development and test dependencies are listed in [`tests/README.md`](tests/README.md).
 
 ---
 

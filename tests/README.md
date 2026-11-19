@@ -3,6 +3,15 @@
 Integration tests that run against a **disposable** Node-RED container. They
 restart and hard-kill that container, so never point them at a hub you use.
 Unit tests for the MicroPython clients live in `micropython/test_logfire.py`.
+For their optional live checks, use
+`python micropython/test_logfire.py --live --host 192.168.1.10 --port 1880`.
+The selected port must serve both HTTP and UDP; the disposable hub below maps
+them to separate ports, so use its dedicated hub and UI test commands instead.
+
+The suite uses Python 3, Node.js, a C++17 host compiler, Docker or Podman, and
+Playwright with its browser installed. Each test's dependencies are listed below.
+Container tests use Node-RED 5.0.10; the hub itself does not require the host
+compiler or browser test tools.
 
 | Test | What it checks | Needs |
 |---|---|---|

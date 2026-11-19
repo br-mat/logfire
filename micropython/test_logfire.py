@@ -26,16 +26,17 @@ UDP Tests:
 
 Live Tests (--live only, requires hub at LOGFIRE_HOST:LOGFIRE_PORT):
   11. TCP: sends 4 levels to pylog-tcp, verifies all arrived on hub via /logs
-  12. UDP: same to pylog-udp (requires UDP port 1880 to be reachable)
+  12. UDP: same to pylog-udp (requires the selected UDP port to be reachable)
 
 Usage:
   python test_logfire.py           # runs unit tests only
-  python test_logfire.py --live    # also runs live hub delivery verification
+  python test_logfire.py --live --host 192.168.1.10 --port 1880
 """
 
-LOGFIRE_HOST = "10.0.0.XX"   # set to your hub's IP before running --live
+LOGFIRE_HOST = "10.0.0.XX"   # override with --host for live tests
 LOGFIRE_PORT = 1880
 
+import argparse
 import sys
 import io
 import time
@@ -43,6 +44,16 @@ import urllib.request
 import json
 import socket
 from unittest.mock import patch
+
+parser = argparse.ArgumentParser(description="Run LogFire client unit tests and optional live delivery checks.")
+parser.add_argument("--live", action="store_true", help="also send TCP and UDP messages to a running hub")
+parser.add_argument("--host", default=LOGFIRE_HOST, help="hub hostname or IP for live tests")
+parser.add_argument("--port", type=int, default=LOGFIRE_PORT, help="hub HTTP and UDP port (default: 1880)")
+args = parser.parse_args()
+if not 1 <= args.port <= 65535:
+    parser.error("--port must be between 1 and 65535")
+LOGFIRE_HOST = args.host
+LOGFIRE_PORT = args.port
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -436,7 +447,7 @@ lf._sock.close()
 
 # ── Live Delivery Tests ────────────────────────────────────────────────────────
 
-if "--live" not in sys.argv:
+if not args.live:
     print("\nLive tests skipped (run with --live to enable)")
 else:
     RUN_ID = str(int(time.time()))
@@ -464,7 +475,7 @@ else:
 
     # ── Test 12: UDP live delivery ─────────────────────────────────────────────
     print(f"\nTest 12: UDP live delivery -> {UDP_DEVICE} (run {RUN_ID})")
-    print("  Requires UDP port 1880 to be reachable on the hub")
+    print(f"  Requires UDP port {LOGFIRE_PORT} to be reachable on the hub")
     lf = fresh_udp()
     lf.init(UDP_DEVICE, LOGFIRE_HOST, LOGFIRE_PORT)
     lf.mirror_serial(False)
