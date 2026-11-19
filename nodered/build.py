@@ -18,17 +18,40 @@ FUNCTION_SOURCES = {
     "fn_clear_device": "clear_device.js",
     "fn_auto_delete": "enforce_size_limit.js",
     "fn_restore_logs": "restore_logs.js",
+    "fn_save_logs": "save_logs.js",
 }
 FUNCTION_INITIALIZERS = {
     "fn_parse_store": "parse_store.initialize.js",
+    "fn_save_logs": "save_logs.initialize.js",
 }
+FUNCTION_FINALIZERS = {
+    "fn_save_logs": "save_logs.finalize.js",
+}
+# Persistence wiring: only "Save logs" writes the file (atomic, every 2 s).
 NODE_OVERRIDES = {
     "file_read": {
         "sendError": True,
     },
-    "fn_restore_logs": {
+    "fn_parse_store": {
+        "outputs": 2,
+        "wires": [["http_resp_log"], ["ws_out_logs"]],
+    },
+    "fn_clear_device": {
         "outputs": 1,
-        "wires": [["file_save"]],
+        "wires": [["http_resp_clear"]],
+    },
+    "fn_auto_delete": {
+        "outputs": 0,
+        "wires": [],
+    },
+    "fn_restore_logs": {
+        "outputs": 0,
+        "wires": [],
+    },
+    "fn_save_logs": {
+        "outputs": 0,
+        "wires": [],
+        "libs": [{"var": "fs", "module": "fs"}],
     },
 }
 
@@ -60,6 +83,7 @@ def build():
 
     remaining_function_ids = set(FUNCTION_SOURCES)
     remaining_initializer_ids = set(FUNCTION_INITIALIZERS)
+    remaining_finalizer_ids = set(FUNCTION_FINALIZERS)
     remaining_override_ids = set(NODE_OVERRIDES)
     serve_node_found = False
     for node in flow:
@@ -82,6 +106,15 @@ def build():
             node["initialize"] = read_text(source_path).rstrip()
             remaining_initializer_ids.remove(node_id)
 
+        if node_id in FUNCTION_FINALIZERS:
+            source_path = os.path.join(
+                DIR,
+                "functions",
+                FUNCTION_FINALIZERS[node_id],
+            )
+            node["finalize"] = read_text(source_path).rstrip()
+            remaining_finalizer_ids.remove(node_id)
+
         if node_id in NODE_OVERRIDES:
             node.update(NODE_OVERRIDES[node_id])
             remaining_override_ids.remove(node_id)
@@ -98,6 +131,11 @@ def build():
     if remaining_initializer_ids:
         missing = ", ".join(sorted(remaining_initializer_ids))
         print(f"ERROR: initializer nodes not found in flow.json: {missing}")
+        return False
+
+    if remaining_finalizer_ids:
+        missing = ", ".join(sorted(remaining_finalizer_ids))
+        print(f"ERROR: finalizer nodes not found in flow.json: {missing}")
         return False
 
     if remaining_override_ids:
@@ -118,7 +156,8 @@ def build():
     print(
         f"OK: embedded {len(html)} bytes of HTML and "
         f"{len(FUNCTION_SOURCES)} function sources plus "
-        f"{len(FUNCTION_INITIALIZERS)} initializer into {FLOW_PATH}"
+        f"{len(FUNCTION_INITIALIZERS)} initializer and "
+        f"{len(FUNCTION_FINALIZERS)} finalizer into {FLOW_PATH}"
     )
     return True
 

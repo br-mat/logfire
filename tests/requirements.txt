@@ -1,0 +1,2 @@
+# Only for tests/ui_test.py
+playwright==1.65.2

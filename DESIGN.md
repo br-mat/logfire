@@ -2,20 +2,20 @@
 
 | Decision | Reason |
 | --- | --- |
-| HTTP POST over UDP | Slightly more reliable, works through most local network setups without extra config |
+| HTTP POST as the default transport | Works through most local network setups without extra config; UDP is available as an optional transport |
 | Plain text body | No JSON parsing needed on the device side |
 | Fire and forget | A dropped log message is acceptable — never worth risking a crash |
 | Node-RED as hub | Visual, easy to modify, serves the UI, handles timers — no custom server code needed |
 | Vanilla JS UI | No build step, no framework, just open and it works |
 | UI embedded in flow | Single file to import — `build.py` merges HTML into the flow so no `httpStatic` setup needed |
 | No library.properties | Minimal file count — PlatformIO picks up the lib folder as-is |
-| File-backed log store | JSON file at `/data/logfire_logs.json` — survives Docker restarts, no database needed |
-| 3 MB per-device cap | Size-based eviction keeps storage bounded — oldest entries are dropped first |
+| File-backed log store | JSON snapshots at `/data/logfire_logs.json`, with no database. A timer attempts to save pending changes every two seconds instead of serializing on every message. Each save uses its own temporary file, fsync and rename. On stop/redeploy, the node blocks older saves from publishing and synchronously flushes pending data, including in-flight snapshots. The final rename and shutdown flush are synchronous; bulk periodic writes remain asynchronous. Unexpected stops can lose changes since the last successful save; HTTP success does not acknowledge a disk write. Keep `/data` on a persistent volume |
+| 3 MB per-device cap | Enforced on every insert from a per-device byte count; oldest entries are dropped first. A 60 s job recomputes exact sizes as a safety net. Device count is not capped, so total hub memory is not bounded by this limit |
 | Log levels 0–4 | Optional severity tag (`(-N)` wire format) — plain by default, color-coded in the UI |
-| Persistent connection | Single reused TCP socket per device — avoids socket exhaustion from per-call HTTPClient/socket creation |
-| No message buffering | Buffering conflicts with fire-and-forget and KISS — the persistent connection fix already eliminates socket exhaustion, which was the actual problem. Buffering would add complexity (ring buffer, flush timing, tick/flush API) for marginal benefit |
-| `localOnly` / `local_only` mode | Opt-in flag that bypasses all HTTP/WiFi logic entirely — Serial output only. Solves two cases: offline test builds (no hub reachable) and time-sensitive firmware where the 1 s HTTP timeout on a dead hub is unacceptable. Keeps user code clean — one call at boot, no `#ifdef` guards around every `log()` |
-| UDP hub input *(experimental)* | The Node-RED flow accepts UDP on port 1880, but the bundled Arduino and MicroPython clients currently use TCP. A future UDP client could avoid HTTP timeout stalls in time-sensitive firmware. UDP requires Docker port `1880/udp` to be mapped and is not yet verified end-to-end. |
+| Persistent connection | One reused TCP socket per device avoids creating a connection for every message. Clients read responses completely. The retry policy allows one reconnect and resend after failure on a reused connection, which can duplicate a message if only the response was lost. MicroPython also reconnects before sending after more than 4 s idle. Hub idle timeouts depend on deployment |
+| No device-side message queue | Failed messages are discarded after the permitted reconnect attempt. Devices do not retain logs for later delivery. The hub separately buffers received logs in memory between saves |
+| `localOnly` / `local_only` mode | Makes log calls use Serial/REPL output without network operations. Useful for offline development and time-sensitive firmware. Socket timeouts are not total limits on call duration; DNS, connection, response and retry work can add time |
+| UDP transport *(experimental)* | Optional `LogFireUDP` / `logfire_udp.py` clients send one packet per message to UDP port 1880, using the same format, parser and storage as HTTP. They do not wait for a response or retry. DNS and socket operations can still take time. Packets may be lost, duplicated or reordered. HTTP remains the default and permits one reconnect retry; neither transport has a device-side message queue. Expose `1880/udp` when using UDP |
 
 ---
 

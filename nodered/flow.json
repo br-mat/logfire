@@ -28,8 +28,8 @@
     "type": "function",
     "z": "logfire_tab",
     "name": "Parse & Store",
-    "func": "var raw = msg.payload;\n\nfunction reject(message) {\n    if (!msg.res) {\n        return [null, null, null];\n    }\n\n    msg.statusCode = 400;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = message;\n    return [msg, null, null];\n}\n\nif (typeof raw !== \"string\" || raw.indexOf(\":\") === -1) {\n    return reject(\"Bad format. Expected DEVICE: message\");\n}\n\nvar level = 0;\nvar device;\nvar message;\nvar match = raw.match(/^(.+?)\\(-(\\d)\\):\\s*(.*)$/);\n\nif (match) {\n    device = match[1].trim();\n    var parsedLevel = parseInt(match[2], 10);\n    if (parsedLevel >= 1 && parsedLevel <= 4) {\n        level = parsedLevel;\n    }\n    message = match[3];\n} else {\n    var separatorIndex = raw.indexOf(\":\");\n    device = raw.substring(0, separatorIndex).trim();\n    message = raw.substring(separatorIndex + 1).trim();\n}\n\nvar reservedDeviceNames = [\"__proto__\", \"constructor\", \"prototype\"];\n\nif (\n    !device ||\n    device.length > 64 ||\n    reservedDeviceNames.indexOf(device) !== -1\n) {\n    return reject(\"Invalid device name\");\n}\n\nvar timestamp = new Date().toISOString();\nvar sequence = (context.get(\"entrySequence\") || 0) + 1;\nif (sequence > 999999) {\n    sequence = 1;\n}\ncontext.set(\"entrySequence\", sequence);\n\nvar entry = {\n    id: timestamp + \"-\" + (\"000000\" + sequence).slice(-6),\n    device: device,\n    message: message,\n    timestamp: timestamp,\n    level: level\n};\n\nvar storeIsReady = flow.get(\"logfireReady\") === true;\nvar targetStore = storeIsReady\n    ? flow.get(\"logs\") || {}\n    : flow.get(\"pendingLogs\") || {};\n\nif (!Object.prototype.hasOwnProperty.call(targetStore, device)) {\n    targetStore[device] = [];\n}\ntargetStore[device].push(entry);\n\nif (storeIsReady) {\n    flow.set(\"logs\", targetStore);\n} else {\n    flow.set(\"pendingLogs\", targetStore);\n}\n\nvar httpMessage = null;\nif (msg.res) {\n    // Preserve msg.req/msg.res from the HTTP In node for HTTP Response.\n    msg.statusCode = 200;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"OK\";\n    httpMessage = msg;\n}\n\nvar websocketMessage = { payload: entry };\nvar fileMessage = storeIsReady\n    ? { payload: JSON.stringify(targetStore) }\n    : null;\n\nreturn [httpMessage, websocketMessage, fileMessage];",
-    "outputs": 3,
+    "func": "var MAX_BYTES_PER_DEVICE = 3 * 1024 * 1024;\nvar raw = msg.payload;\n\nfunction reject(message) {\n    if (!msg.res) {\n        return [null, null];\n    }\n\n    msg.statusCode = 400;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = message;\n    return [msg, null];\n}\n\nfunction entryBytes(entry) {\n    // Same measure as the size-limit and restore functions: JSON + separator.\n    return Buffer.byteLength(JSON.stringify(entry), \"utf8\") + 1;\n}\n\nif (typeof raw !== \"string\") {\n    return reject(\"Bad format. Expected DEVICE: message\");\n}\n\n// Senders like println() or nc add a trailing newline; it is not part of the message.\nraw = raw.replace(/[\\r\\n]+$/, \"\");\n\nif (raw.indexOf(\":\") === -1) {\n    return reject(\"Bad format. Expected DEVICE: message\");\n}\n\nvar level = 0;\nvar device;\nvar message;\n// The device name and level are on the first line; the message may span lines.\nvar match = raw.match(/^([^\\r\\n]+?)\\(-(\\d)\\):[ \\t]*([\\s\\S]*)$/);\n\nif (match) {\n    device = match[1].trim();\n    var parsedLevel = parseInt(match[2], 10);\n    if (parsedLevel >= 1 && parsedLevel <= 4) {\n        level = parsedLevel;\n    }\n    message = match[3];\n} else {\n    var separatorIndex = raw.indexOf(\":\");\n    device = raw.substring(0, separatorIndex).trim();\n    message = raw.substring(separatorIndex + 1).trim();\n}\n\nvar reservedDeviceNames = [\"__proto__\", \"constructor\", \"prototype\"];\n\nif (\n    !device ||\n    device.length > 64 ||\n    /[\\u0000-\\u001f\\u007f]/.test(device) ||\n    reservedDeviceNames.indexOf(device) !== -1\n) {\n    return reject(\"Invalid device name\");\n}\n\nvar timestamp = new Date().toISOString();\nvar sequence = (context.get(\"entrySequence\") || 0) + 1;\nif (sequence > 999999) {\n    sequence = 1;\n}\ncontext.set(\"entrySequence\", sequence);\n\nvar entry = {\n    id: timestamp + \"-\" + (\"000000\" + sequence).slice(-6),\n    device: device,\n    message: message,\n    timestamp: timestamp,\n    level: level\n};\n\nif (flow.get(\"logfireReady\") === true) {\n    var logs = flow.get(\"logs\") || {};\n    var logBytes = flow.get(\"logBytes\") || {};\n\n    if (!Object.prototype.hasOwnProperty.call(logs, device)) {\n        logs[device] = [];\n        logBytes[device] = 0;\n    }\n    logs[device].push(entry);\n    logBytes[device] = (logBytes[device] || 0) + entryBytes(entry);\n\n    // Enforce the per-device cap on every insert, oldest entries first.\n    while (logBytes[device] > MAX_BYTES_PER_DEVICE && logs[device].length > 1) {\n        logBytes[device] -= entryBytes(logs[device].shift());\n    }\n\n    flow.set(\"logs\", logs);\n    flow.set(\"logBytes\", logBytes);\n    flow.set(\"logsDirty\", true);   // persisted by \"Save logs\" (atomic, at most every 2 s)\n} else {\n    // Startup: buffer until \"Restore to context\" has merged the saved file.\n    var pending = flow.get(\"pendingLogs\") || {};\n    if (!Object.prototype.hasOwnProperty.call(pending, device)) {\n        pending[device] = [];\n    }\n    pending[device].push(entry);\n    flow.set(\"pendingLogs\", pending);\n}\n\nvar httpMessage = null;\nif (msg.res) {\n    // Preserve msg.req/msg.res from the HTTP In node for HTTP Response.\n    msg.statusCode = 200;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"OK\";\n    httpMessage = msg;\n}\n\nreturn [httpMessage, { payload: entry }];",
+    "outputs": 2,
     "timeout": "",
     "noerr": 0,
     "initialize": "flow.set(\"logfireReady\", false);\nflow.set(\"pendingLogs\", {});",
@@ -43,9 +43,6 @@
       ],
       [
         "ws_out_logs"
-      ],
-      [
-        "file_save"
       ]
     ]
   },
@@ -76,23 +73,6 @@
     "type": "websocket-listener",
     "path": "/ws/logs",
     "wholemsg": "false"
-  },
-  {
-    "id": "file_save",
-    "type": "file",
-    "z": "logfire_tab",
-    "name": "Save logs",
-    "filename": "/data/logfire_logs.json",
-    "filenameType": "str",
-    "appendNewline": false,
-    "createDir": false,
-    "overwriteFile": "true",
-    "encoding": "utf8",
-    "x": 510,
-    "y": 140,
-    "wires": [
-      []
-    ]
   },
   {
     "id": "http_in_devices",
@@ -216,8 +196,8 @@
     "type": "function",
     "z": "logfire_tab",
     "name": "Clear Device Logs",
-    "func": "var requestBody = msg.payload;\n\nif (typeof requestBody === \"string\") {\n    try {\n        requestBody = JSON.parse(requestBody);\n    } catch (error) {\n        requestBody = null;\n    }\n}\n\nvar device =\n    requestBody && typeof requestBody.device === \"string\"\n        ? requestBody.device.trim()\n        : \"\";\n\nif (!device) {\n    msg.statusCode = 400;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"Missing device\";\n    return [msg, null];\n}\n\nif (flow.get(\"logfireReady\") !== true) {\n    msg.statusCode = 503;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"Log store is starting\";\n    return [msg, null];\n}\n\nvar logs = flow.get(\"logs\") || {};\ndelete logs[device];\nflow.set(\"logs\", logs);\n\n// Preserve msg.req/msg.res from the HTTP In node for HTTP Response.\nmsg.statusCode = 200;\nmsg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\nmsg.payload = \"OK\";\n\nvar fileMessage = { payload: JSON.stringify(logs) };\nreturn [msg, fileMessage];",
-    "outputs": 2,
+    "func": "var requestBody = msg.payload;\n\nif (typeof requestBody === \"string\") {\n    try {\n        requestBody = JSON.parse(requestBody);\n    } catch (error) {\n        requestBody = null;\n    }\n}\n\nvar device =\n    requestBody && typeof requestBody.device === \"string\"\n        ? requestBody.device.trim()\n        : \"\";\n\nif (!device) {\n    msg.statusCode = 400;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"Missing device\";\n    return [msg, null];\n}\n\nif (flow.get(\"logfireReady\") !== true) {\n    msg.statusCode = 503;\n    msg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\n    msg.payload = \"Log store is starting\";\n    return [msg, null];\n}\n\nvar logs = flow.get(\"logs\") || {};\nvar logBytes = flow.get(\"logBytes\") || {};\ndelete logs[device];\ndelete logBytes[device];\nflow.set(\"logs\", logs);\nflow.set(\"logBytes\", logBytes);\nflow.set(\"logsDirty\", true);   // persisted by \"Save logs\"\n\n// Preserve msg.req/msg.res from the HTTP In node for HTTP Response.\nmsg.statusCode = 200;\nmsg.headers = { \"content-type\": \"text/plain; charset=utf-8\" };\nmsg.payload = \"OK\";\n\nreturn msg;",
+    "outputs": 1,
     "timeout": "",
     "noerr": 0,
     "initialize": "",
@@ -228,9 +208,6 @@
     "wires": [
       [
         "http_resp_clear"
-      ],
-      [
-        "file_save"
       ]
     ]
   },
@@ -269,8 +246,8 @@
     "type": "function",
     "z": "logfire_tab",
     "name": "Size-based eviction",
-    "func": "var logs = flow.get(\"logs\") || {};\nvar maxBytesPerDevice = 3 * 1024 * 1024;\nvar deviceNames = Object.keys(logs);\nvar changed = false;\n\nfor (var i = 0; i < deviceNames.length; i++) {\n    var device = deviceNames[i];\n    var entries = logs[device];\n\n    if (!Array.isArray(entries)) {\n        delete logs[device];\n        changed = true;\n        continue;\n    }\n\n    var size = Buffer.byteLength(JSON.stringify(entries), \"utf8\");\n    while (size > maxBytesPerDevice && entries.length > 0) {\n        size -= Buffer.byteLength(JSON.stringify(entries[0]), \"utf8\") + 1;\n        entries.shift();\n        changed = true;\n    }\n\n    if (entries.length === 0) {\n        delete logs[device];\n        changed = true;\n    }\n}\n\nif (changed) {\n    flow.set(\"logs\", logs);\n}\n\nmsg.payload = JSON.stringify(logs);\nreturn msg;",
-    "outputs": 1,
+    "func": "// Safety net, every 60 s: recompute exact per-device sizes and trim.\n// The cap itself is enforced on insert by \"Parse & Store\".\nvar MAX_BYTES_PER_DEVICE = 3 * 1024 * 1024;\n\nif (flow.get(\"logfireReady\") !== true) {\n    return null;\n}\n\nvar logs = flow.get(\"logs\") || {};\nvar logBytes = {};\nvar deviceNames = Object.keys(logs);\nvar changed = false;\n\nfunction entryBytes(entry) {\n    return Buffer.byteLength(JSON.stringify(entry), \"utf8\") + 1;\n}\n\nfor (var i = 0; i < deviceNames.length; i++) {\n    var device = deviceNames[i];\n    var entries = logs[device];\n\n    if (!Array.isArray(entries) || entries.length === 0) {\n        delete logs[device];\n        changed = true;\n        continue;\n    }\n\n    var size = 0;\n    for (var j = 0; j < entries.length; j++) {\n        size += entryBytes(entries[j]);\n    }\n    while (size > MAX_BYTES_PER_DEVICE && entries.length > 1) {\n        size -= entryBytes(entries.shift());\n        changed = true;\n    }\n    logBytes[device] = size;\n}\n\nflow.set(\"logBytes\", logBytes);\nif (changed) {\n    flow.set(\"logs\", logs);\n    flow.set(\"logsDirty\", true);\n}\nreturn null;",
+    "outputs": 0,
     "timeout": "",
     "noerr": 0,
     "initialize": "",
@@ -278,11 +255,7 @@
     "libs": [],
     "x": 330,
     "y": 400,
-    "wires": [
-      [
-        "file_save"
-      ]
-    ]
+    "wires": []
   },
   {
     "id": "inject_restore",
@@ -328,8 +301,8 @@
     "type": "function",
     "z": "logfire_tab",
     "name": "Restore to context",
-    "func": "var restoredLogs = {};\nvar savedDataWasValid = false;\n\ntry {\n    var parsedLogs = JSON.parse(msg.payload);\n    if (!parsedLogs || Array.isArray(parsedLogs) || typeof parsedLogs !== \"object\") {\n        throw new Error(\"Saved log data is not an object\");\n    }\n    restoredLogs = parsedLogs;\n    savedDataWasValid = true;\n} catch (error) {\n    node.warn(\"LogFire: no valid saved logs found, starting fresh\");\n}\n\nvar mergedLogs = Object.create(null);\nvar seenEntries = Object.create(null);\n\nfunction mergeStore(store) {\n    if (!store || Array.isArray(store) || typeof store !== \"object\") {\n        return;\n    }\n\n    var deviceNames = Object.keys(store);\n    for (var i = 0; i < deviceNames.length; i++) {\n        var device = deviceNames[i];\n        var entries = store[device];\n        if (!Array.isArray(entries)) {\n            continue;\n        }\n\n        if (!mergedLogs[device]) {\n            mergedLogs[device] = [];\n        }\n\n        for (var j = 0; j < entries.length; j++) {\n            var entry = entries[j];\n            if (!entry || typeof entry !== \"object\") {\n                continue;\n            }\n\n            var key = entry.id\n                ? \"id:\" + entry.id\n                : \"legacy:\" +\n                  JSON.stringify([\n                      entry.device,\n                      entry.timestamp,\n                      entry.level,\n                      entry.message\n                  ]);\n\n            if (!seenEntries[key]) {\n                seenEntries[key] = true;\n                mergedLogs[device].push(entry);\n            }\n        }\n    }\n}\n\n// Current context can survive a flow deploy; pending logs cover a clean restart.\nmergeStore(restoredLogs);\nmergeStore(flow.get(\"logs\"));\nmergeStore(flow.get(\"pendingLogs\"));\n\nvar mergedDeviceNames = Object.keys(mergedLogs);\nfor (var i = 0; i < mergedDeviceNames.length; i++) {\n    var deviceEntries = mergedLogs[mergedDeviceNames[i]];\n    deviceEntries.sort(function (left, right) {\n        return String(left.timestamp || \"\").localeCompare(\n            String(right.timestamp || \"\")\n        );\n    });\n}\n\nflow.set(\"logs\", mergedLogs);\nflow.set(\"pendingLogs\", {});\nflow.set(\"logfireReady\", true);\n\nif (savedDataWasValid) {\n    node.warn(\n        \"LogFire: restored \" +\n            Object.keys(restoredLogs).length +\n            \" devices from file\"\n    );\n}\n\nmsg.payload = JSON.stringify(mergedLogs);\nreturn msg;",
-    "outputs": 1,
+    "func": "var restoredLogs = {};\nvar savedDataWasValid = false;\n\ntry {\n    var parsedLogs = JSON.parse(msg.payload);\n    if (!parsedLogs || Array.isArray(parsedLogs) || typeof parsedLogs !== \"object\") {\n        throw new Error(\"Saved log data is not an object\");\n    }\n    restoredLogs = parsedLogs;\n    savedDataWasValid = true;\n} catch (error) {\n    node.warn(\"LogFire: no valid saved logs found, starting fresh\");\n}\n\nvar mergedLogs = Object.create(null);\nvar seenEntries = Object.create(null);\n\nfunction mergeStore(store) {\n    if (!store || Array.isArray(store) || typeof store !== \"object\") {\n        return;\n    }\n\n    var deviceNames = Object.keys(store);\n    for (var i = 0; i < deviceNames.length; i++) {\n        var device = deviceNames[i];\n        var entries = store[device];\n        if (!Array.isArray(entries)) {\n            continue;\n        }\n\n        if (!mergedLogs[device]) {\n            mergedLogs[device] = [];\n        }\n\n        for (var j = 0; j < entries.length; j++) {\n            var entry = entries[j];\n            if (!entry || typeof entry !== \"object\") {\n                continue;\n            }\n\n            var key = entry.id\n                ? \"id:\" + entry.id\n                : \"legacy:\" +\n                  JSON.stringify([\n                      entry.device,\n                      entry.timestamp,\n                      entry.level,\n                      entry.message\n                  ]);\n\n            if (!seenEntries[key]) {\n                seenEntries[key] = true;\n                mergedLogs[device].push(entry);\n            }\n        }\n    }\n}\n\n// Current context can survive a flow deploy; pending logs cover a clean restart.\nmergeStore(restoredLogs);\nmergeStore(flow.get(\"logs\"));\nmergeStore(flow.get(\"pendingLogs\"));\n\nvar mergedDeviceNames = Object.keys(mergedLogs);\nfor (var i = 0; i < mergedDeviceNames.length; i++) {\n    var deviceEntries = mergedLogs[mergedDeviceNames[i]];\n    deviceEntries.sort(function (left, right) {\n        return String(left.timestamp || \"\").localeCompare(\n            String(right.timestamp || \"\")\n        );\n    });\n}\n\n// Apply the per-device cap and record sizes for \"Parse & Store\".\nvar MAX_BYTES_PER_DEVICE = 3 * 1024 * 1024;\nvar logBytes = Object.create(null);\nfunction entryBytes(entry) {\n    return Buffer.byteLength(JSON.stringify(entry), \"utf8\") + 1;\n}\nfor (var k = 0; k < mergedDeviceNames.length; k++) {\n    var name = mergedDeviceNames[k];\n    var list = mergedLogs[name];\n    var size = 0;\n    for (var m = 0; m < list.length; m++) {\n        size += entryBytes(list[m]);\n    }\n    while (size > MAX_BYTES_PER_DEVICE && list.length > 1) {\n        size -= entryBytes(list.shift());\n    }\n    logBytes[name] = size;\n}\n\nflow.set(\"logs\", mergedLogs);\nflow.set(\"logBytes\", logBytes);\nflow.set(\"pendingLogs\", {});\nflow.set(\"logsDirty\", true);   // persist the merged store via \"Save logs\"\nflow.set(\"logfireReady\", true);\n\nif (savedDataWasValid) {\n    node.warn(\n        \"LogFire: restored \" +\n            Object.keys(restoredLogs).length +\n            \" devices from file\"\n    );\n}\n\nreturn null;",
+    "outputs": 0,
     "timeout": "",
     "noerr": 0,
     "initialize": "",
@@ -337,11 +310,47 @@
     "libs": [],
     "x": 510,
     "y": 480,
+    "wires": []
+  },
+  {
+    "id": "inject_save",
+    "type": "inject",
+    "z": "logfire_tab",
+    "name": "Every 2s",
+    "props": [],
+    "repeat": "2",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "2",
+    "topic": "",
+    "x": 100,
+    "y": 540,
     "wires": [
       [
-        "file_save"
+        "fn_save_logs"
       ]
     ]
+  },
+  {
+    "id": "fn_save_logs",
+    "type": "function",
+    "z": "logfire_tab",
+    "name": "Save logs (atomic)",
+    "func": "// Save a snapshot off the message path. Separate temporary files prevent an\n// old open handle from modifying a newer snapshot published during shutdown.\nvar FILE = \"/data/logfire_logs.json\";\nvar state = context.get(\"logfireSaveState\");\n\nif (\n    !state || state.stopping || state.saving ||\n    flow.get(\"logfireReady\") !== true || flow.get(\"logsDirty\") !== true\n) {\n    return null;\n}\n\nstate.saving = true;\nflow.set(\"logsDirty\", false);\n\n(async function () {\n    var temporaryDirectory;\n    try {\n        var data = JSON.stringify(flow.get(\"logs\") || {});\n        temporaryDirectory = await fs.promises.mkdtemp(FILE + \".tmp-\");\n        var temporaryFile = temporaryDirectory + \"/snapshot\";\n        var handle = await fs.promises.open(temporaryFile, \"w\");\n        try {\n            await handle.writeFile(data, \"utf8\");\n            await handle.sync();\n        } finally {\n            await handle.close();\n        }\n        // No await between the check and rename: finalization cannot interleave\n        // here. Bulk writing/fsync stays async; only the rename is synchronous.\n        if (!state.stopping) {\n            fs.renameSync(temporaryFile, FILE);\n        }\n    } catch (error) {\n        // The finalizer handles the current snapshot once stopping starts.\n        if (!state.stopping) {\n            flow.set(\"logsDirty\", true);\n        }\n        node.error(\"LogFire: saving logs failed: \" + error.message);\n    } finally {\n        if (temporaryDirectory) {\n            try {\n                await fs.promises.unlink(temporaryDirectory + \"/snapshot\");\n            } catch (error) {\n                if (error.code !== \"ENOENT\") {\n                    node.warn(\"LogFire: temp cleanup failed: \" + error.message);\n                }\n            }\n            try {\n                await fs.promises.rmdir(temporaryDirectory);\n            } catch (error) {\n                node.warn(\"LogFire: temp cleanup failed: \" + error.message);\n            }\n        }\n        state.saving = false;\n    }\n})();\n\nreturn null;",
+    "outputs": 0,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "// A new object for each node lifetime: a late callback from the old deployment\n// must keep its stopped state even after the replacement node initializes.\ncontext.set(\"logfireSaveState\", { saving: false, stopping: false });",
+    "finalize": "// Invalidate any older asynchronous save before publishing the final snapshot.\n// This synchronous flush completes before the Function node's stop hook returns.\nvar state = context.get(\"logfireSaveState\");\nif (state) {\n    state.stopping = true;\n}\n\nif (\n    flow.get(\"logfireReady\") === true &&\n    (flow.get(\"logsDirty\") === true || (state && state.saving))\n) {\n    var FILE = \"/data/logfire_logs.json\";\n    var temporaryDirectory;\n    try {\n        var data = JSON.stringify(flow.get(\"logs\") || {});\n        temporaryDirectory = fs.mkdtempSync(FILE + \".tmp-\");\n        var temporaryFile = temporaryDirectory + \"/snapshot\";\n        var descriptor = fs.openSync(temporaryFile, \"w\");\n        try {\n            fs.writeFileSync(descriptor, data, \"utf8\");\n            fs.fsyncSync(descriptor);\n        } finally {\n            fs.closeSync(descriptor);\n        }\n        fs.renameSync(temporaryFile, FILE);\n        flow.set(\"logsDirty\", false);\n    } catch (error) {\n        flow.set(\"logsDirty\", true);\n        node.error(\"LogFire: final save failed: \" + error.message);\n    } finally {\n        if (temporaryDirectory) {\n            try {\n                fs.unlinkSync(temporaryDirectory + \"/snapshot\");\n            } catch (error) {\n                if (error.code !== \"ENOENT\") {\n                    node.warn(\"LogFire: temp cleanup failed: \" + error.message);\n                }\n            }\n            try {\n                fs.rmdirSync(temporaryDirectory);\n            } catch (error) {\n                node.warn(\"LogFire: temp cleanup failed: \" + error.message);\n            }\n        }\n    }\n}",
+    "libs": [
+      {
+        "var": "fs",
+        "module": "fs"
+      }
+    ],
+    "x": 300,
+    "y": 540,
+    "wires": []
   },
   {
     "id": "http_in_logfire",

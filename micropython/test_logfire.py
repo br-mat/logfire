@@ -5,11 +5,16 @@ Verifies logfire.py (TCP) and logfire_udp.py (UDP) on standard CPython (no Pico 
 Not intended for deployment — the example/ folder contains the usage reference.
 
 TCP Tests:
-  1.  local_only skips network (proved by timing against unreachable host)
+  1.  local_only skips DNS and socket creation (mock proof)
   2.  local_only stdout format (captured and verified)
   3.  mirror_serial=False produces no output (captured and verified)
-  4.  local_only=False restores normal network path (timing proof)
+  4.  local_only=False restores normal network path (mock proof)
   5.  local_only(True) disconnects existing socket (state check)
+  5a. full HTTP response consumed, connection reused (scripted socket)
+  5b. connection closed by the hub -> reconnect and resend once
+  5c. failure on a fresh connection is not retried (hub down)
+  5d. idle > 4 s -> reconnect before sending (hub keep-alive is 5 s)
+  5e. "Connection: close" response -> socket not reused
 
 UDP Tests:
   6.  local_only skips sendto (proved by mock socket)
@@ -17,10 +22,11 @@ UDP Tests:
   8.  mirror_serial=False produces no output (captured and verified)
   9.  local_only(False) clears flag (state check)
   10. socket created at init() (state check)
+       Reinitialization closes the previous socket; loopback verifies all levels.
 
 Live Tests (--live only, requires hub at LOGFIRE_HOST:LOGFIRE_PORT):
   11. TCP: sends 4 levels to pylog-tcp, verifies all arrived on hub via /logs
-  12. UDP: same to pylog-udp — expected failure until Node-RED UDP listener is in flow
+  12. UDP: same to pylog-udp (requires UDP port 1880 to be reachable)
 
 Usage:
   python test_logfire.py           # runs unit tests only
@@ -35,12 +41,15 @@ import io
 import time
 import urllib.request
 import json
+import socket
+from unittest.mock import patch
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fresh():
     """Reset TCP module state between tests."""
     if "logfire" in sys.modules:
+        sys.modules["logfire"]._disconnect()
         del sys.modules["logfire"]
     import logfire
     return logfire
@@ -48,9 +57,66 @@ def fresh():
 def fresh_udp():
     """Reset UDP module state between tests."""
     if "logfire_udp" in sys.modules:
+        sock = sys.modules["logfire_udp"]._sock
+        if sock is not None:
+            sock.close()
         del sys.modules["logfire_udp"]
     import logfire_udp
     return logfire_udp
+
+OK_RESPONSE = (
+    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n"
+    b"Content-Length: 2\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nOK"
+)
+
+
+class FakeTcp:
+    """Scripted TCP socket: each send consumes one scripted reply.
+
+    A reply is bytes (delivered in small chunks), b"" (hub closed the
+    connection: recv returns EOF) or an OSError instance (raised on send).
+    """
+    created = []
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.sent = []
+        self.inbox = b""
+        self.closed = False
+        FakeTcp.created.append(self)
+
+    def settimeout(self, value):
+        pass
+
+    def connect(self, addr):
+        pass
+
+    def sendall(self, data):
+        reply = self.replies.pop(0) if self.replies else b""
+        if isinstance(reply, OSError):
+            raise reply
+        self.sent.append(data)
+        self.inbox += reply
+
+    def recv(self, size):
+        size = min(size, 7)            # deliver in small chunks
+        data, self.inbox = self.inbox[:size], self.inbox[size:]
+        return data
+
+    def close(self):
+        self.closed = True
+
+
+def fake_sockets(*scripts):
+    """Patch socket creation so each new connection gets the next script."""
+    scripts = list(scripts)
+    FakeTcp.created = []
+    addr = ("127.0.0.1", 1880)
+    return (
+        patch.object(socket, "getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 0, "", addr)]),
+        patch.object(socket, "socket", side_effect=lambda *a, **k: FakeTcp(scripts.pop(0))),
+    )
+
 
 def capture(fn):
     """Run fn() with stdout redirected, return what was printed."""
@@ -106,25 +172,23 @@ def verify_delivery(tag, device, expected_levels, wait=1.0):
 
 # ── TCP Unit Tests ─────────────────────────────────────────────────────────────
 
-# Test 1: local_only skips network (timing proof)
+# Test 1: local_only skips network (mock proof)
 print("\nTest 1: local_only skips network entirely (TCP)")
 lf = fresh()
-lf.init("TestDevice", "10.0.255.254", 1880)  # routable but unreachable
+lf.init("TestDevice", "127.0.0.1", 1880)
 lf.local_only(True)
 lf.mirror_serial(False)
 
-t0 = time.time()
-for _ in range(10):
-    lf.log("should be instant", 1)
-elapsed = time.time() - t0
-# If local_only is broken and tries to connect, it would stall for seconds.
-check("10 log() calls complete in <0.1s with unreachable host", elapsed < 0.1)
+with patch.object(socket, "getaddrinfo") as resolve, patch.object(socket, "socket") as create:
+    for _ in range(10):
+        lf.log("local only", 1)
+    check("local_only skips DNS and socket creation", not resolve.called and not create.called)
 
 
 # Test 2: local_only stdout format (TCP)
 print("\nTest 2: local_only stdout format (TCP)")
 lf = fresh()
-lf.init("TestDevice", "10.0.255.254", 1880)
+lf.init("TestDevice", "127.0.0.1", 1880)
 lf.local_only(True)
 
 out = capture(lambda: (
@@ -160,12 +224,14 @@ lf.local_only(True)
 lf.mirror_serial(False)
 lf.log("local only")
 
-lf.local_only(False)
-lf.mirror_serial(False)
-t0 = time.time()
-lf.log("now tries network")   # TCP connect to unreachable host -- will stall/timeout
-elapsed = time.time() - t0
-check("network path re-enabled after local_only(False) (took >0.5s)", elapsed > 0.5)
+addr = ("127.0.0.1", 1880)
+with patch.object(socket, "getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 0, "", addr)]), patch.object(socket, "socket") as create:
+    create.return_value.recv.side_effect = [OK_RESPONSE]
+    lf.local_only(False)
+    lf.log("now tries network")
+    sock = create.return_value
+    check("network path reconnects after local_only(False)", sock.connect.call_args is not None and sock.connect.call_args.args == (addr,))
+    check("restored network path sends the log", sock.sendall.called and b"now tries network" in sock.sendall.call_args.args[0])
 
 
 # Test 5: local_only(True) disconnects existing socket (TCP)
@@ -183,6 +249,84 @@ lf.local_only(True)    # must call _disconnect() and reset the flag
 check("_connected reset to False after local_only(True)", not _lf_mod._connected)
 
 
+# Test 5a: the full HTTP response is consumed (nothing left in the socket)
+print("\nTest 5a: full HTTP response consumed (TCP)")
+lf = fresh()
+lf.mirror_serial(False)
+lf.init("TestDevice", "127.0.0.1", 1880)
+p1, p2 = fake_sockets([OK_RESPONSE, OK_RESPONSE, OK_RESPONSE])
+with p1, p2:
+    for i in range(3):
+        lf.log("msg %d" % i)
+    conn = FakeTcp.created[0]
+    check("3 logs reuse one connection", len(FakeTcp.created) == 1 and len(conn.sent) == 3)
+    check("no unread response bytes left in the socket", conn.inbox == b"")
+
+
+# Test 5b: hub closed the reused connection -> reconnect and send once more
+print("\nTest 5b: closed keep-alive connection is retried once (TCP)")
+lf = fresh()
+lf.mirror_serial(False)
+lf.init("TestDevice", "127.0.0.1", 1880)
+p1, p2 = fake_sockets([OK_RESPONSE, b""], [OK_RESPONSE])
+with p1, p2:
+    lf.log("first")
+    lf.log("after hub closed the connection")
+    second = FakeTcp.created[1] if len(FakeTcp.created) > 1 else None
+    check("a new connection was opened", second is not None)
+    check("the message was re-sent on the new connection",
+          second is not None and any(b"after hub closed" in d for d in second.sent))
+    check("client is connected afterwards", lf._connected)
+
+p1, p2 = fake_sockets([OK_RESPONSE, OSError(104, "ECONNRESET")], [OK_RESPONSE])
+with p1, p2:
+    lf = fresh(); lf.mirror_serial(False); lf.init("TestDevice", "127.0.0.1", 1880)
+    lf.log("first")
+    lf.log("send raises on the stale connection")
+    check("send error on a reused connection is retried once",
+          len(FakeTcp.created) == 2 and any(b"send raises" in d for d in FakeTcp.created[1].sent))
+
+
+# Test 5c: a fresh connection that fails is not retried (hub down)
+print("\nTest 5c: failure on a fresh connection is not retried (TCP)")
+lf = fresh()
+lf.mirror_serial(False)
+lf.init("TestDevice", "127.0.0.1", 1880)
+p1, p2 = fake_sockets([OSError(113, "EHOSTUNREACH")], [OK_RESPONSE])
+with p1, p2:
+    lf.log("hub is down")
+    check("only one connection attempt", len(FakeTcp.created) == 1)
+    check("client is disconnected afterwards", not lf._connected)
+
+
+# Test 5d: idle longer than the hub's keep-alive -> reconnect before sending
+print("\nTest 5d: idle connection is replaced before sending (TCP)")
+lf = fresh()
+lf.mirror_serial(False)
+lf.init("TestDevice", "127.0.0.1", 1880)
+clock = [1000]
+p1, p2 = fake_sockets([OK_RESPONSE], [OK_RESPONSE])
+with p1, p2, patch.object(lf, "ticks_ms", side_effect=lambda: clock[0]):
+    lf.log("before idle")
+    clock[0] += 4500
+    lf.log("after idle")
+    check("new connection after > 4 s idle", len(FakeTcp.created) == 2 and FakeTcp.created[0].closed)
+    check("message sent on the new connection", any(b"after idle" in d for d in FakeTcp.created[1].sent))
+
+
+# Test 5e: Connection: close from the hub -> do not reuse the socket
+print("\nTest 5e: 'Connection: close' response closes the socket (TCP)")
+lf = fresh()
+lf.mirror_serial(False)
+lf.init("TestDevice", "127.0.0.1", 1880)
+close_resp = OK_RESPONSE.replace(b"Connection: keep-alive", b"Connection: close")
+p1, p2 = fake_sockets([close_resp], [OK_RESPONSE])
+with p1, p2:
+    lf.log("one")
+    lf.log("two")
+    check("second message uses a new connection", len(FakeTcp.created) == 2)
+
+
 # ── UDP Unit Tests ─────────────────────────────────────────────────────────────
 
 class MockSock:
@@ -191,6 +335,8 @@ class MockSock:
         self.called = False
     def sendto(self, data, addr):
         self.called = True
+    def close(self):
+        pass
 
 
 # Test 6: local_only skips sendto (mock proof, UDP)
@@ -203,6 +349,7 @@ lf.mirror_serial(False)
 
 import logfire_udp as _lf_udp_mod
 mock = MockSock()
+_lf_udp_mod._sock.close()
 _lf_udp_mod._sock = mock
 
 lf.local_only(True)
@@ -260,6 +407,33 @@ lf.init("TestDevice", "10.0.255.254", 1880)
 check("_sock is not None after init()", _lf_udp_mod3._sock is not None)
 
 
+print("\nUDP socket reinitialization")
+old_sock = lf._sock
+lf.init("NewDevice", "127.0.0.1", 1880)
+check("reinitialization closes the old socket", old_sock.fileno() == -1)
+check("reinitialization creates a usable replacement", lf._sock.fileno() >= 0)
+
+
+print("\nUDP loopback delivery")
+lf = fresh_udp()
+lf.mirror_serial(False)
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+    receiver.bind(("127.0.0.1", 0))
+    receiver.settimeout(1)
+    lf.init("Loopback", "127.0.0.1", receiver.getsockname()[1])
+    for level in range(5):
+        message = "temperature: 23\u00b0C"
+        lf.log(message, level)
+        prefix = "Loopback(-{})".format(level) if level else "Loopback"
+        expected = "{}: {}".format(prefix, message).encode("utf-8")
+        try:
+            received = receiver.recvfrom(4096)[0]
+        except socket.timeout:
+            received = None
+        check("UTF-8 datagram delivered at level {}".format(level), received == expected)
+lf._sock.close()
+
+
 # ── Live Delivery Tests ────────────────────────────────────────────────────────
 
 if "--live" not in sys.argv:
@@ -290,7 +464,7 @@ else:
 
     # ── Test 12: UDP live delivery ─────────────────────────────────────────────
     print(f"\nTest 12: UDP live delivery -> {UDP_DEVICE} (run {RUN_ID})")
-    print("  NOTE: expected failure until Node-RED UDP listener is imported to flow")
+    print("  Requires UDP port 1880 to be reachable on the hub")
     lf = fresh_udp()
     lf.init(UDP_DEVICE, LOGFIRE_HOST, LOGFIRE_PORT)
     lf.mirror_serial(False)

@@ -37,6 +37,7 @@ private:
     String _buildUrl();
     void _ensureConnected();
     void _disconnect();
+    void _drainBody();
 };
 
 extern LogFireClass LogFire;
