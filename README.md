@@ -29,9 +29,11 @@ The device name and log level are added by the library — you only pass the mes
 | 3 | ERROR | red |
 | 4 | CRITICAL | purple |
 
-Node-RED receives it, parses the device name and level, timestamps it, and stores it in memory. Logs can be observed live at `http://<node-red-host>:1880/logfire`. Per-device logs are capped at 3 MB — oldest entries are evicted when the limit is reached. The browser UI shows a live tab per device with a filter dropdown.
+Node-RED receives it, parses the device name and level, timestamps it, and stores it in memory. Logs can be observed live at `http://<node-red-host>:1880/logfire`. Per-device logs are capped at 3 MB — oldest entries are evicted as soon as the limit is reached. Messages may span several lines (for example stack traces). The browser UI shows a live tab per device with a filter dropdown.
 To keep large histories responsive, each browser tab renders the latest 2,000
 retained entries while preserving the complete retained count.
+Device count is not capped: the 3 MB limit applies to each device's retained
+logs, not to total hub memory.
 
 ---
 
@@ -44,9 +46,13 @@ retained entries while preserving the complete retained count.
 
 Both transports use the same message format, parser and storage path. UDP sends
 without waiting for a hub response; packets can be lost, duplicated or reordered.
-DNS lookup and socket operations can still take time. HTTP waits for a response,
-but neither client queues or retries failed messages, so neither transport
-guarantees delivery. UDP delivery from physical boards remains unverified.
+DNS lookup and socket operations can still take time. HTTP waits for the hub's
+response. If a send fails on a reused connection, the HTTP clients reconnect
+and send the message once more (a duplicate is possible); beyond
+that, neither client queues failed messages, so neither transport guarantees
+delivery. Compilation and desktop tests do not establish delivery on physical
+ESP32, ESP8266 or Pico boards. Client network behavior still needs hardware
+validation; UDP remains experimental.
 
 ---
 
@@ -60,7 +66,11 @@ Run `python nodered/build.py` to embed the UI and maintained Function-node
 sources into the flow, then import `nodered/flow.json` into Node-RED. The flow
 serves the UI at `GET /logfire`.
 
-Logs persist to `/data/logfire_logs.json` inside the Docker container and survive restarts.
+The hub periodically saves logs to `/data/logfire_logs.json`. Keep `/data` on a
+persistent volume to retain saved logs when recreating the container. An
+unexpected stop can lose changes since the last successful save; an HTTP
+response does not confirm a disk write. See [HOWTO.md](HOWTO.md) for setup and
+delivery limitations.
 
 ### 2. Arduino (ESP32 / ESP8266)
 
